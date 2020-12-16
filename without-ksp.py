@@ -4,11 +4,12 @@ import pickle
 import numpy as np
 import time
 
-from computers import *
+from computer import *
+from faulty_computers import *
 
 # Load the pickle files
-actions = pickle.load(open("actions.pickle", "rb"))
-states = pickle.load(open("states.pickle", "rb"))
+actions = pickle.load(open("data/actions.pickle", "rb"))
+states = pickle.load(open("data/states.pickle", "rb"))
 timestep = 0
 
 # Argument parsing
@@ -38,7 +39,7 @@ def allocate_flight_computers(arguments):
     for _ in range(n_correct_fc):
         flight_computers.append(FlightComputer(state))
     for _ in range(n_incorrect_fc):
-        flight_computers.append(allocate_random_flight_computer(state))
+        flight_computers.append(allocate_faulty_flight_computer(state))
     # Add the peers for the consensus protocol
     for fc in flight_computers:
         for peer in flight_computers:
