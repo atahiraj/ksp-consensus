@@ -4,7 +4,7 @@ import pickle
 import numpy as np
 import time
 
-from computer import *
+from computer.base import *
 from faulty_computers import *
 
 # Load the pickle files
@@ -24,6 +24,8 @@ def readout_state():
 
 
 def execute_action(action):
+    print(action)
+    print(actions[timestep])
     for k in action.keys():
         assert(action[k] == actions[timestep][k])
 
@@ -35,14 +37,14 @@ def allocate_flight_computers(arguments):
     n_incorrect_fc = n_fc - n_correct_fc
     state = readout_state()
     for _ in range(n_correct_fc):
-        flight_computers.append(FlightComputer(state, _))
+        flight_computers.append(FlightComputer(state))
     for _ in range(n_incorrect_fc):
         flight_computers.append(allocate_faulty_flight_computer(state))
     # Add the peers for the consensus protocol
     for fc in flight_computers:
         for peer in flight_computers:
             if fc != peer:
-                fc.add_peer(peer)
+                fc.add_peers(peer)
     for fc in flight_computers:
         fc.start()
 
@@ -54,7 +56,7 @@ flight_computers = allocate_flight_computers(arguments)
 
 
 def select_leader():
-    leader_index = np.random.randint(0, len(flight_computers))
+    leader_index = 0
 
     return flight_computers[leader_index]
 

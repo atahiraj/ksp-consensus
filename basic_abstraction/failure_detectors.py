@@ -30,24 +30,20 @@ class PerfectFailureDetector:
     def receive(self, source_number, raw_message):
         if raw_message == self.heartbeat_request:
             self.link.send(source_number, self.heartbeat_reply)
-            if(self.link.process_number == 0 or source_number == 0):
-                print(f"{time.time() - start} {self.link.process_number}: Reply to {source_number}")
         elif raw_message == self.heartbeat_reply and source_number not in self.alive:
-            ##with self.lock:
-            self.alive.add(source_number)
-            if(self.link.process_number == 0 or source_number == 0):
-                print(f"{time.time() - start} {self.link.process_number}: Reply from {source_number}")
+            with self.lock:
+                self.alive.add(source_number)
 
     def timeout_callback(self):
-        #with self.lock:
-        for peer in self.peers - self.detected:
-            if peer not in self.alive and peer not in self.detected:
-                self.detected.add(peer)
-                self.crash_callback(peer)
-            start = time.time()
-            self.link.send(peer, self.heartbeat_request)
-            delay = time.time() - start
-        self.alive = set()
+        with self.lock:
+            # Copy because otherwise weird OS shenanigans happens
+            old_alive = self.alive
+            self.alive = set()
+            for peer in self.peers - self.detected:
+                if peer not in old_alive:
+                    self.detected.add(peer)
+                    self.crash_callback(peer)
+                self.link.send(peer, self.heartbeat_request)
 
     def kill(self):
         self.timeout_thread.kill()
@@ -62,6 +58,7 @@ class PerfectFailureDetector:
         def run(self):
             time.sleep(self.timeout_time)
             while self.alive:
+                time.sleep(0.001)
                 self.callback()
                 time.sleep(self.timeout_time)
 
@@ -70,11 +67,12 @@ class PerfectFailureDetector:
 
 if __name__ == "__main__":
     from basic_abstraction.link import FairLossLink
+    timescale = 0.01
 
     class Test:
         def __init__(self, process_number):
             self.link = FairLossLink(process_number)
-            self.pfd = PerfectFailureDetector(self.link, self.callback, timeout_time=1)
+            self.pfd = PerfectFailureDetector(self.link, self.callback, timeout_time=timescale)
 
         def callback(self, process_number):
             print("{} {}: Process {} has crashed".format(time.time() - start, self.link.process_number, process_number))
@@ -94,7 +92,7 @@ if __name__ == "__main__":
     test1.pfd.start_heartbeat()
     test2.pfd.start_heartbeat()
 
-    time.sleep(0.5)
+    time.sleep(5*timescale)
 
     test3 = Test(3)
     test3.pfd.add_peers(1, 2, 0)
@@ -103,12 +101,12 @@ if __name__ == "__main__":
     test1.pfd.add_peers(3)
     test2.pfd.add_peers(3)
 
-    time.sleep(0.5)
+    time.sleep(5*timescale)
     test2.kill()
-    time.sleep(1)
+    time.sleep(10*timescale)
     test1.kill()
 
-    time.sleep(2)
+    time.sleep(20*timescale)
 
     test0.kill()
     test3.kill()
