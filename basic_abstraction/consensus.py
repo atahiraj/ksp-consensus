@@ -64,7 +64,7 @@ class HierarchicalConsensus(Consensus):
                     self.broadcast.broadcast(("c", self.proposal))
                     decided = self.proposal
                     self.round += 1
-                time.sleep(0.001)
+                #time.sleep(0.001)
             self.reset()
         return decided
 
