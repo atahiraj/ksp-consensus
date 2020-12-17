@@ -19,11 +19,13 @@ class PerfectFailureDetector:
         self.peers.extend(peers)
         self.alive.extend(peers)
 
-    def receive(self, source_number, message):
-        if message == "heartbeat request".encode("utf-8"):
-            self.link.send(source_number, "heartbeat reply".encode("utf-8"))
-        elif message == "heartbeat reply".encode("utf-8") and source_number not in self.alive:
-            self.alive.append(source_number)
+    def receive(self, source_number, raw_message):
+        mess_type, message = raw_message
+        if mess_type == "pfd":
+            if message == "request":
+                self.link.send(source_number, ("pfd", "reply"))
+            elif message == "reply" and source_number not in self.alive:
+                self.alive.append(source_number)
 
     def timeout(self):
         old_alive = self.alive
@@ -32,7 +34,7 @@ class PerfectFailureDetector:
             if peer not in old_alive and peer not in self.detected:
                 self.detected.append(peer)
                 self.crash_callback(peer)
-            self.link.send(peer, "heartbeat request".encode("utf-8"))
+            self.link.send(peer, ("pfd", "request"))
 
     class TimeoutThread(threading.Thread):
         def __init__(self, callback):

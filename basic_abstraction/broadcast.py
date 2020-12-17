@@ -1,5 +1,4 @@
 from basic_abstraction.link import FairLossLink
-import pickle
 
 class Broadcast:
     def __init__(self, link, deliver_callback):
@@ -24,10 +23,12 @@ class BestEffortBroadcast(Broadcast):
 
     def broadcast(self, message):
         for peer in self.peers:
-            self.link.send(peer, message)
+            self.link.send(peer, ("beb", message))
 
-    def receive(self, source_number, message):
-        self.deliver_callback(source_number, message)
+    def receive(self, source_number, raw_message):
+        if raw_message[0] == "beb":
+            message = raw_message[1]
+            self.deliver_callback(source_number, message)
 
 class EagerReliableBroadcast(Broadcast):
     def __init__(self, link, deliver_callback, loss=0.0):
@@ -40,16 +41,17 @@ class EagerReliableBroadcast(Broadcast):
         self.be_broadcast.add_peers(peers_number_list)
 
     def broadcast(self, message):
-        raw_message = pickle.dumps((self.link.process_number, message.decode("utf-8")))
+        raw_message = ("erb", self.link.process_number, message)
         self.be_broadcast.broadcast(raw_message)
 
     def be_deliver(self, source_number, raw_message):
-        source, message = pickle.loads(raw_message)
-        if message not in self.delivered:
-            self.delivered[self.delivered_cycle] = message
-            self.delivered_cycle = (self.delivered_cycle + 1) % 20
-            self.be_broadcast.broadcast(raw_message)
-            self.deliver_callback(source, message)
+        mess_type, source, message = raw_message
+        if mess_type == "erb":
+            if message not in self.delivered:
+                self.delivered[self.delivered_cycle] = message
+                self.delivered_cycle = (self.delivered_cycle + 1) % 20
+                self.be_broadcast.broadcast(raw_message)
+                self.deliver_callback(source, message)
 
 if (__name__ == "__main__"):
     class Test:
@@ -59,7 +61,7 @@ if (__name__ == "__main__"):
             self.beb = EagerReliableBroadcast(self.link, self.deliver)
 
         def deliver(self, source_number, message):
-            print("{}: Message received {} from {}".format(self.process_number, message.encode("utf-8"), source_number))
+            print("{}: Message received {} from {}".format(self.process_number, message, source_number))
 
     test0 = Test(0)
     test1 = Test(1)
@@ -69,6 +71,6 @@ if (__name__ == "__main__"):
     test1.beb.add_peers([0,1,2])
     test2.beb.add_peers([0,1,2])
 
-    test0.beb.broadcast("Hello world !".encode("utf-8"))
-    test2.beb.broadcast("Hello back".encode("utf-8"))
+    test0.beb.broadcast("Hello world !")
+    test2.beb.broadcast("Hello back")
 

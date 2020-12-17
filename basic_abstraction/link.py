@@ -7,6 +7,7 @@ import re
 import random
 from queue import Queue
 import time
+import pickle
 
 class FairLossLink:
     max_message_length = 1024
@@ -20,6 +21,8 @@ class FairLossLink:
         self.create_socket()
         self.alive = True
         self.initialize_listener()
+        self.debug = False
+
 
     def create_socket(self):
         server_address = self.get_address(self.process_number)
@@ -33,6 +36,7 @@ class FairLossLink:
         self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         self.socket.bind(server_address)
 
+
     def initialize_listener(self):
         self.listening_thread = FairLossLink.ListeningThread(self)
         self.worker_thread = FairLossLink.WorkerThread()
@@ -40,18 +44,31 @@ class FairLossLink:
         self.worker_thread.start()
         
 
-    def send(self, destination_process, message_bytes):
-        if (random.uniform(0, 1) >= self.loss):
+    def send(self, destination_process, message):
+        if (self.alive and random.uniform(0, 1) >= self.loss):
+            message_bytes = pickle.dumps(message)
             if(len(message_bytes) >= FairLossLink.max_message_length):
                 raise Exception("Message exceding maximum length of {} bytes, received {} bytes"
                         .format(FairLossLink.max_message_length, len(message_bytes)))
             self.socket.sendto(message_bytes, self.get_address(destination_process))
+            if self.debug:
+                print("{}: Sending {}".format(self.process_number, message))
+        elif self.debug:
+            print("{}: Not send {}".format(self.process_number, message))
+
+
 
     def receive(self):
-        while self.alive:
+        while True:
             data, source = self.socket.recvfrom(FairLossLink.max_message_length)
-            for callback in self.receive_callbacks:
-                self.worker_thread.put(callback, (self.get_process(source), data))
+            message = pickle.loads(data)
+            if self.alive:
+                if self.debug:
+                    print("{}: Received {}".format(self.process_number, message))
+                for callback in self.receive_callbacks:
+                    self.worker_thread.put(callback, (self.get_process(source), message))
+            elif self.debug:
+                print("{}: Not received {}".format(self.process_number, message))
 
     def get_address(self, process_number):
         return '/tmp/fairlosslink{}.socket'.format(process_number)
@@ -95,19 +112,19 @@ if __name__ == "__main__":
 
         def link_receive(self, process_number, message):
             time.sleep(1)
-            print("{}: Received message: {} from {}".format(self.process_number, message.decode("utf-8"), process_number))
+            print("{}: Received message: {} from {}".format(self.process_number, message, process_number))
 
     test0 = Test(0)
     test1 = Test(1)
 
     def more_callback(process_number, message):
-        print("You got mail: {} from {}".format(message.decode("utf-8"), process_number))
+        print("You got mail: {} from {}".format(message, process_number))
 
     test0.link.add_callback(more_callback)
 
-    test0.link.send(1, "Coucou".encode("utf-8"))
+    test0.link.send(1, "Coucou")
     print("Send Coucou")
-    test1.link.send(0, "Hello".encode("utf-8"))
+    test1.link.send(0, "Hello")
     print("Send Hello")
-    test0.link.send(0, "Sup".encode("utf-8"))
+    test0.link.send(0, "Sup")
     print("Send Sup")
