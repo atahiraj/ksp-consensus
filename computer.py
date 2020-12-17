@@ -1,6 +1,12 @@
+from basic_abstraction.link import FairLossLink
+from basic_abstraction.consensus import HierarchicalConsensus
+from basic_abstraction.broadcast import EagerReliableBroadcast
+import time
+
 class FlightComputer:
 
-    def __init__(self, state):
+    def __init__(self, state, process_number):
+        self.process_number = process_number
         self.state = state
         self.current_stage_index = 0
         self.peers = []
@@ -17,8 +23,69 @@ class FlightComputer:
             self._handle_stage_9]
         self.stage_handler = self.stage_handlers[self.current_stage_index]
 
+        self.link = FairLossLink(process_number)
+        self.link.debug = False
+        self.consensus = HierarchicalConsensus(self.link)
+        self.broadcast = EagerReliableBroadcast(self.link, self.broadcast_receive)
+
+
     def add_peer(self, peer):
-        self.peers.append(peer)
+        peer_number = peer.process_number
+        self.peers.append(peer_number)
+        self.consensus.add_peers([peer_number])
+        self.broadcast.add_peers([peer_number])
+
+    def start(self):
+        self.consensus.start()
+
+    def broadcast_receive(self, source, raw_message):
+        mess_type, message = raw_message
+
+        if source != self.process_number:
+            if mess_type == "state":
+                while not self.consensus.can_propose:
+                    #time.sleep(0.001)
+                    pass
+                decided = self.consensus.propose(self.acceptable_state(message))
+                if decided:
+                    self.deliver_state(message)
+            elif mess_type == "action":
+                while not self.consensus.can_propose:
+                    #time.sleep(0.001)
+                    pass
+                decided = self.consensus.propose(self.acceptable_action(message))
+                if decided:
+                    self.deliver_action(message)
+
+    def decide_on_state(self, state):
+        self.broadcast.broadcast(("state", state))
+        # TODO organise a vote
+
+        while not self.consensus.can_propose:
+            #time.sleep(0.001)
+            pass
+        decided = self.consensus.propose(self.acceptable_state(state))
+
+        if decided:
+            self.deliver_state(state)
+
+        return decided
+
+
+    def decide_on_action(self, action):
+        self.broadcast.broadcast(("action", action))
+        # TODO organise a vote
+
+        while not self.consensus.can_propose:
+            #time.sleep(0.001)
+            pass
+        decided = self.consensus.propose(self.acceptable_action(action))
+
+        if decided:
+            self.deliver_action(action)
+
+        return decided
+
 
     def _handle_stage_1(self):
         action = {"pitch": 90, "throttle": 1.0, "heading": 90, "stage": False, "next_state": False}
@@ -98,39 +165,18 @@ class FlightComputer:
     def sample_next_action(self):
         return self.stage_handler()
 
-    def decide_on_state(self, state):
-        acceptations = [p.acceptable_state(state) for p in self.peers]
-        decided = sum(acceptations) / (len(self.peers) + 1) > 0.5
-
-        if decided:
-            for p in self.peers:
-                p.deliver_state(state)
-            self.deliver_state(state)
-
-        return decided
-
-    def decide_on_action(self, action):
-        acceptations = [p.acceptable_action(action) for p in self.peers]
-        decided = sum(acceptations) / (len(self.peers) + 1) > 0.5
-
-        if decided:
-            for p in self.peers:
-                p.deliver_action(action)
-            self.deliver_action(action)
-
-        return decided
-
     def acceptable_state(self, state):
         return True
 
     def acceptable_action(self, action):
         our_action = self.sample_next_action()
-        accept = True
+        if set(our_action.keys()) > set(action.keys()) or set(our_action.keys()) < set(action.keys()):
+            return False
         for k in our_action.keys():
             if our_action[k] != action[k]:
-                accept = False
+                return False
 
-        return accept
+        return True
 
     def deliver_action(self, action):
         if "next_stage" in action and action["next_stage"]:

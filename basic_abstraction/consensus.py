@@ -4,19 +4,18 @@ from basic_abstraction.link import FairLossLink
 import time
 
 class Consensus:
-    def __init__(self, link, decide_callback):
+    def __init__(self, link):
         self.link = link
-        self.decide_callback = decide_callback
 
     def add_peers(peers_number_list):
         pass
 
     def propose(self, value):
-        pass
+        return value
 
 class HierarchicalConsensus(Consensus):
-    def __init__(self, link, decide_callback):
-        super().__init__(link, decide_callback)
+    def __init__(self, link):
+        super().__init__(link)
         self.broadcast = BestEffortBroadcast(link, self.broadcast_receive)
         self.failure_detector = PerfectFailureDetector(self.link, self.failure_detection)
         self.peers = []
@@ -49,6 +48,7 @@ class HierarchicalConsensus(Consensus):
         self.failure_detector.start_heartbeat()
 
     def propose(self, value):
+        decided = None
         if self.can_propose:
             self.can_propose = False
 
@@ -62,19 +62,22 @@ class HierarchicalConsensus(Consensus):
                 if self.round == self.link.process_number and self.proposal != None and not self.broadcasting:
                     self.broadcasting = True
                     self.broadcast.broadcast(("c", self.proposal))
-                    self.decide_callback(self.proposal)
+                    decided = self.proposal
                     self.round += 1
-
-                time.sleep(0.05)
+                time.sleep(0.001)
             self.reset()
+        return decided
+
 
     def broadcast_receive(self, source_number, raw_message):
-        mess_type, message = raw_message
+        mess_type = raw_message[0]
         if mess_type == "c":
+            message = raw_message[1]
             if source_number < self.link.process_number and source_number > self.proposer:
                 self.proposal = message
                 self.proposer = source_number
             self.delivered[source_number] = True
+
 
 if __name__ == "__main__":
     import threading
@@ -83,11 +86,8 @@ if __name__ == "__main__":
         def __init__(self, process_number):
             self.process_number = process_number
             self.link = FairLossLink(process_number)
-            self.consensus = HierarchicalConsensus(self.link, self.decided)
+            self.consensus = HierarchicalConsensus(self.link)
             self.proposal = None
-
-        def decided(self, value):
-            print("{}: Decided on {}".format(self.process_number, value))
 
         def propose(self, value):
             while not self.consensus.can_propose:
@@ -97,7 +97,8 @@ if __name__ == "__main__":
             thread.start()
 
         def run(self):
-            self.consensus.propose(self.proposal)
+            value = self.consensus.propose(self.proposal)
+            print("{}: Decided on {}".format(self.process_number, value))
 
         class TestThread(threading.Thread):
             def __init__(self, test):

@@ -50,11 +50,11 @@ class FairLossLink:
             if(len(message_bytes) >= FairLossLink.max_message_length):
                 raise Exception("Message exceding maximum length of {} bytes, received {} bytes"
                         .format(FairLossLink.max_message_length, len(message_bytes)))
-            self.socket.sendto(message_bytes, self.get_address(destination_process))
             if self.debug:
-                print("{}: Sending {}".format(self.process_number, message))
+                print("{}: Sending {} to {}".format(self.process_number, message, destination_process))
+            self.socket.sendto(message_bytes, self.get_address(destination_process))
         elif self.debug:
-            print("{}: Not send {}".format(self.process_number, message))
+            print("{}: Not send {} to {}".format(self.process_number, message, destination_process))
 
 
 
@@ -62,13 +62,14 @@ class FairLossLink:
         while True:
             data, source = self.socket.recvfrom(FairLossLink.max_message_length)
             message = pickle.loads(data)
+            source_number = self.get_process(source)
             if self.alive:
                 if self.debug:
-                    print("{}: Received {}".format(self.process_number, message))
+                    print("{}: Received {} from {}".format(self.process_number, message, source_number))
                 for callback in self.receive_callbacks:
-                    self.worker_thread.put(callback, (self.get_process(source), message))
+                    self.worker_thread.put(callback, (source_number, message))
             elif self.debug:
-                print("{}: Not received {}".format(self.process_number, message))
+                print("{}: Not received {} from {}".format(self.process_number, message, source_number))
 
     def get_address(self, process_number):
         return '/tmp/fairlosslink{}.socket'.format(process_number)

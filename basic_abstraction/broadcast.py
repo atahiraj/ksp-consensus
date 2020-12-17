@@ -42,13 +42,18 @@ class EagerReliableBroadcast(Broadcast):
 
     def broadcast(self, message):
         raw_message = ("erb", self.link.process_number, message)
+        self.delivered[self.delivered_cycle] = raw_message
+        self.delivered_cycle = (self.delivered_cycle + 1) % 20
         self.be_broadcast.broadcast(raw_message)
+        self.deliver_callback(self.link.process_number, message)
+        
 
     def be_deliver(self, source_number, raw_message):
-        mess_type, source, message = raw_message
+        mess_type = raw_message[0]
         if mess_type == "erb":
-            if message not in self.delivered:
-                self.delivered[self.delivered_cycle] = message
+            mess_type, source, message = raw_message
+            if raw_message not in self.delivered:
+                self.delivered[self.delivered_cycle] = raw_message
                 self.delivered_cycle = (self.delivered_cycle + 1) % 20
                 self.be_broadcast.broadcast(raw_message)
                 self.deliver_callback(source, message)

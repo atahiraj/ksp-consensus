@@ -24,8 +24,6 @@ def readout_state():
 
 
 def execute_action(action):
-    print(action)
-    print(actions[timestep])
     for k in action.keys():
         assert(action[k] == actions[timestep][k])
 
@@ -37,7 +35,7 @@ def allocate_flight_computers(arguments):
     n_incorrect_fc = n_fc - n_correct_fc
     state = readout_state()
     for _ in range(n_correct_fc):
-        flight_computers.append(FlightComputer(state))
+        flight_computers.append(FlightComputer(state, _))
     for _ in range(n_incorrect_fc):
         flight_computers.append(allocate_faulty_flight_computer(state))
     # Add the peers for the consensus protocol
@@ -45,6 +43,9 @@ def allocate_flight_computers(arguments):
         for peer in flight_computers:
             if fc != peer:
                 fc.add_peer(peer)
+    for fc in flight_computers:
+        fc.start()
+
 
     return flight_computers
 
@@ -84,6 +85,8 @@ try:
             complete = True
             continue
         if leader.decide_on_action(action):
+            if timestep % 1000 == 0:
+                print(f"{timestep}/{len(states)}")
             execute_action(action)
         else:
             timestep -= 1
