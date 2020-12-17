@@ -32,6 +32,7 @@ class HierarchicalConsensus(Consensus):
         for peer in self.peers:
             self.delivered[peer] = False
         self.broadcasting = False
+        self.can_propose = True
 
 
     def add_peers(self, peers_number_list):
@@ -48,8 +49,11 @@ class HierarchicalConsensus(Consensus):
         self.failure_detector.start_heartbeat()
 
     def propose(self, value):
-        if self.proposal == None:
-            self.proposal = value
+        if self.can_propose:
+            self.can_propose = False
+
+            if self.proposal == None:
+                self.proposal = value
 
             while self.round <= len(self.peers):
                 if self.round in self.detected_nodes or self.delivered[self.round]:
@@ -59,8 +63,9 @@ class HierarchicalConsensus(Consensus):
                     self.broadcasting = True
                     self.broadcast.broadcast(("c", self.proposal))
                     self.decide_callback(self.proposal)
+                    self.round += 1
 
-                time.sleep(0.01)
+                time.sleep(0.05)
             self.reset()
 
     def broadcast_receive(self, source_number, raw_message):
@@ -85,12 +90,13 @@ if __name__ == "__main__":
             print("{}: Decided on {}".format(self.process_number, value))
 
         def propose(self, value):
+            while not self.consensus.can_propose:
+                time.sleep(0.1)
             self.proposal = value
             thread = Test.TestThread(self)
             thread.start()
 
         def run(self):
-            print("Run {}".format(self.process_number))
             self.consensus.propose(self.proposal)
 
         class TestThread(threading.Thread):
@@ -114,8 +120,10 @@ if __name__ == "__main__":
     test1.consensus.start()
     test2.consensus.start()
 
-    #test1.link.alive = False
+    test0.propose("lol0")
+    test1.propose("lil0")
+    test2.propose("wesh0")
 
-    test0.propose("lol")
-    test1.propose("lil")
-    test2.propose("wesh")
+    test0.propose("lol1")
+    test1.propose("lil1")
+    test2.propose("wesh1")
