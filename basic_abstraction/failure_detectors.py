@@ -49,7 +49,7 @@ class PerfectFailureDetector(Abstraction):
     def detect_failures(self):
         while self.alive:
             self.send_heartbeats()
-            time.sleep(self.TIMEOUT/100)
+            time.sleep(self.TIMEOUT/10)
             self.timeout()
 
     def send_heartbeats(self):
