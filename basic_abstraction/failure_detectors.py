@@ -1,7 +1,7 @@
 from threading import Thread, Lock
 import time
 
-from base import Abstraction
+from basic_abstraction.base import Abstraction
 
 start = time.time()
 
@@ -10,15 +10,13 @@ class PerfectFailureDetector(Abstraction):
     REQUEST = 0
     REPLY = 1
     
-    def __init__(self, link, abstraction_callback, operation_id_callback):
+    def __init__(self, link):
         super().__init__()
-        self.abstraction_callback = abstraction_callback
-        self.operation_id_callback = operation_id_callback
         self.event_handler_map = {
             PerfectFailureDetector.REQUEST: self.request,
             PerfectFailureDetector.REPLY: self.reply
         }
-
+        self.clients = []
         self.peers = set()
         self.detected = set()
         self.correct = set()
@@ -35,12 +33,15 @@ class PerfectFailureDetector(Abstraction):
     def add_peers(self, *peers):
         self.peers.update(peers)
 
-    def request(self, source_number, message):
+    def register(self, abstraction, operation_id):
+        self.clients.append((abstraction, operation_id))
+
+    def request(self, source_number, _):
         if self.debug:
             print(f"PFD: {self.process_number}: request from {source_number}")
         self.send(source_number, (self.REPLY, None))
 
-    def reply(self, source_number, message):
+    def reply(self, source_number, _):
         if self.debug:
             print(f"PFD: {self.process_number}: reply from {source_number}")
         with self.lock:
@@ -60,9 +61,12 @@ class PerfectFailureDetector(Abstraction):
         with self.lock:
             for peer in self.peers - self.correct - self.detected:
                 self.detected.add(peer)
-                self.abstraction_callback.trigger_event(self.operation_id_callback, args=(peer,))
+
                 if self.debug:
                     print(f"PFD: {self.process_number}: peer {peer} crashed")
+                for (abstraction, operation_id) in self.clients:
+                    abstraction.trigger_event(operation_id, args=(peer,))
+
             self.correct.clear()
 
 if __name__ == "__main__":
@@ -74,7 +78,8 @@ if __name__ == "__main__":
             super().__init__()
             self.event_handler_map = {self.CRASHED: self.crashed}
             self.link = PerfectLink(process_number)
-            self.pfd = PerfectFailureDetector(self.link, self, self.CRASHED)
+            self.pfd = PerfectFailureDetector(self.link)
+            self.pfd.register(self, self.CRASHED)
 
         def start(self):
             super().start()
@@ -98,14 +103,6 @@ if __name__ == "__main__":
     test1.pfd.add_peers(0, 2)
     test2.pfd.add_peers(0, 1)
     test0.start()
-    """
-    test1.abstr_worker.start()
-    test1.pfd.abstr_worker.start()
-    test1.link.start()
-    test2.abstr_worker.start()
-    test2.pfd.abstr_worker.start()
-    test2.link.start()
-    """
     test1.start()
     test2.start()
         

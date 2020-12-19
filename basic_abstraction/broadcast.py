@@ -1,5 +1,7 @@
-from base import Abstraction
-from link import PerfectLink
+from basic_abstraction.base import Abstraction
+from basic_abstraction.link import PerfectLink
+
+from utils import Logging
 
 class Broadcast(Abstraction):
     BROADCAST = 0
@@ -28,19 +30,19 @@ class BestEffortBroadcast(Broadcast):
     def __init__(self, link, abstraction_callback, operation_id_callback):
         super().__init__(link, abstraction_callback, operation_id_callback)
         self.peers = set()
+        self.logger = Logging(self.process_number, "BEB")
+        self.link = link
         
     def add_peers(self, *peers):
         self.peers.update(peers)
 
     def broadcast(self, message):
-        if self.debug:
-            print(f"BEB: {self.process_number}: broadcasting {message}")
+        self.logger.log_debug(f"Broadcasting {message}")
         for peer in self.peers:
             self.send(peer, (self.RECEIVE, message))
 
     def receive(self, source_number, message):
-        if self.debug:
-            print(f"BEB: {self.process_number}: receiving {message} from {source_number}")
+        self.logger.log_debug(f"Receiving {message} from {source_number}")
         self.abstraction_callback.trigger_event(self.operation_id_callback, (source_number, message))
 
 
@@ -50,6 +52,8 @@ class EagerReliableBroadcast(Broadcast):
         self.beb = BestEffortBroadcast(link, self, Broadcast.RECEIVE)
         self.delivered = [None] * max_concurrent_messages
         self.delivered_cycle = 0
+        self.timestamp = 0
+        self.logger = Logging(self.process_number, "ERB")
 
     def start(self):
         super().start()
@@ -67,17 +71,18 @@ class EagerReliableBroadcast(Broadcast):
         self.delivered_cycle = (self.delivered_cycle + 1) % len(self.delivered)
 
     def broadcast(self, message):
-        if self.debug:
-            print(f"ERB: {self.process_number}: broadcasting {message}")
+        self.logger.log_debug(f"Broadcasting {message}")
         #self.register_delivered(message)
-        self.beb.trigger_event(Broadcast.BROADCAST, args=(message,))
+        message = (self.process_number, message, self.timestamp)
+        self.timestamp += 1
+        self.beb.trigger_event(Broadcast.BROADCAST, kwargs={"message": message})
 
     def receive(self, source_number, message):
-        if self.debug:
-            print(f"ERB: {self.process_number}: receiving {message} from {source_number}")
         if message not in self.delivered:
+            original_source, original_message, _ = message
+            self.logger.log_debug(f"Receiving {original_message} from {original_source}")
             self.register_delivered(message)
-            self.abstraction_callback.trigger_event(self.operation_id_callback, (source_number, message))
+            self.abstraction_callback.trigger_event(self.operation_id_callback, args=(original_source, original_message))
             self.beb.trigger_event(Broadcast.BROADCAST, args=(message,))
 
 if (__name__ == "__main__"):

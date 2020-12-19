@@ -8,6 +8,7 @@ import traceback
 from computer import *
 from faulty_computers import *
 
+
 # Load the pickle files
 actions = pickle.load(open("data/actions.pickle", "rb"))
 states = pickle.load(open("data/states.pickle", "rb"))
@@ -58,7 +59,6 @@ def allocate_flight_computers(arguments):
 # Connect with Kerbal Space Program
 flight_computers = allocate_flight_computers(arguments)
 
-
 def select_leader():
     return random.choice(flight_computers)
 
@@ -78,12 +78,14 @@ def next_action(state):
 complete = False
 try:
     while not complete:
+        print(timestep)
         timestep += 1
         state = readout_state()
         leader = select_leader()
         state_decided = leader.decide_on_state(state)
         if not state_decided:
             continue
+
         action = leader.sample_next_action()
         if action is None:
             complete = True
@@ -94,6 +96,7 @@ try:
             execute_action(action)
         else:
             timestep -= 1
+
 except Exception as e:
     print(e)
     traceback.print_exc()
@@ -102,3 +105,6 @@ if complete:
     print("Success!")
 else:
     print("Fail!")
+
+for fc in flight_computers:
+    fc.stop()

@@ -1,6 +1,8 @@
 from threading import Thread
 from queue import Queue, Empty
 
+from utils import Logging
+
 class Abstraction:
     TIMEOUT = 1
     def __init__(self):
@@ -20,8 +22,6 @@ class Abstraction:
         while self.alive:
             try:
                 event_flag, args, kwargs = self.event_queue.get(timeout=self.TIMEOUT)
-                #if self.debug:
-                #    print(f"ABS: event {event_flag}, args {args}, kwargs {kwargs}")
             except Empty:
                 continue
             else:

@@ -4,7 +4,8 @@ import pickle
 import os
 from threading import Thread
 
-from base import Abstraction
+from basic_abstraction.base import Abstraction
+from utils import Logging
 
 class PerfectLink(Abstraction):
     SEND = 0
@@ -22,6 +23,7 @@ class PerfectLink(Abstraction):
         }
         self.create_socket()
         self.listener = Thread(target=self.receive)
+        self.logger = Logging(self.process_number, "LINK")
 
     def start(self):
         super().start()
@@ -46,15 +48,13 @@ class PerfectLink(Abstraction):
             data = pickle.dumps(message)
             if len(data) > self.MAX_LEN:
                 raise Exception(f"Message exceding maximum length of {self.MAX_LEN} bytes, received {len(data)} bytes")
-            if self.debug:
-                print(f"PL: {self.process_number}: Sending {message[1]} to {destination_process}")
+            self.logger.log_debug(f"Sending {message[1]} to {destination_process}")
             try:
                 self.socket.sendto(data, self.get_address(destination_process))
             except Exception as e:
-                if self.debug:
-                    print(f"PL: {self.process_number}: Message {message[1]} for {destination_process} dropped")
-        elif self.debug:
-            print(f"PL: {self.process_number}: Not send {message[1]} to {destination_process}")
+                self.logger.log_debug(f"Message {message[1]} for {destination_process} dropped")
+        else:
+            self.logger.log_debug(f"Not send {message[1]} to {destination_process}")
 
     def deliver(self, source_number, client_id, message):
         operation_id, data = message
@@ -70,12 +70,10 @@ class PerfectLink(Abstraction):
             else:
                 client_id, message = pickle.loads(data)
                 source_number = self.get_process(source)
-                if self.debug:
-                    print(f"PL: {self.process_number}: Received {message} from {source_number}")
+                self.logger.log_debug(f"Received {message} from {source_number}")
                 self.trigger_event(self.DELIVER, args=(source_number, client_id, message))
         self.socket.close()
-        if self.debug:
-           print(f"Link {self.process_number} is done") 
+        self.logger.log_debug(f"is done")
 
     def register(self, client):
         self.clients.append(client)
