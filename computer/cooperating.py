@@ -4,7 +4,7 @@ from threading import Event, Lock
 from basic_abstraction import Abstraction
 from basic_abstraction import PerfectLink
 from basic_abstraction import PerfectFailureDetector
-from basic_abstraction import EagerReliableBroadcast
+from basic_abstraction import BestEffortBroadcast, EagerReliableBroadcast
 from basic_abstraction import HierarchicalConsensus
 from computer.base import FlightComputer
 
@@ -24,12 +24,15 @@ class CooperatingComputer(FlightComputer, Abstraction):
         }
         self.process_number = process_number
 
-        self.link = PerfectLink(process_number)
-        self.send = self.link.register(self)
+        self.link = PerfectLink(self.process_number)
+        #self.send = self.link.register(self)
         self.pfd = PerfectFailureDetector(self.link)
         self.pfd.register(self, self.PEER_FAILURE)
-        self.hco = HierarchicalConsensus(self.link, self.pfd, self, self.CONSENSUS)
-        self.erb = EagerReliableBroadcast(self.link, self, self.RECEIVE)
+        self.erb = EagerReliableBroadcast(self.link)
+        self.broadcast = self.erb.register(self)
+
+        self.beb = BestEffortBroadcast(self.link)
+        self.hco = HierarchicalConsensus(self.link, self.pfd, self.beb, self, self.CONSENSUS)
 
         self.peers = {self.process_number}
         self.erb.add_peers(self.process_number)
@@ -54,31 +57,31 @@ class CooperatingComputer(FlightComputer, Abstraction):
         Abstraction.start(self)
         self.link.start()
         self.pfd.start()
-        self.hco.start()
         self.erb.start()
-
+        self.beb.start()
+        self.hco.start()
+        
 
     def stop(self):
         Abstraction.stop(self)
         self.link.stop()
         self.pfd.stop()
-        self.hco.stop()
         self.erb.stop()
+        self.beb.stop()
+        self.hco.stop()
 
 
-    def broadcast_receive(self, source_number, message):
+    def broadcast_receive(self, source_number, message_type, value):
         if self.debug:
-            print(f"{self.process_number}: received state {message} from {source_number}")
+            print(f"{self.process_number}: received state {(message_type, value)} from {source_number}")
     
-        message_type, value = message
-
         if message_type == "state":
             self.finished_consensus.clear()
-            self.proposition = message
+            self.proposition = (message_type, value)
             self.node_decide_on_state(value)
         elif message_type == "action":
             self.finished_consensus.clear()
-            self.proposition = message
+            self.proposition = (message_type, value)
             self.node_decide_on_action(value)
 
 
@@ -90,12 +93,7 @@ class CooperatingComputer(FlightComputer, Abstraction):
         self.finished_consensus.wait() # Last consensus
         self.finished_consensus.clear()
         
-        # Voting
-        # message = ("new_vote", state)
-        # self.erb.trigger_event(self.erb.BROADCAST, kwargs={"message": message})
-
-        message = ("state", state)
-        self.erb.trigger_event(self.erb.BROADCAST, kwargs={"message": message})
+        self.broadcast(self.RECEIVE, args=("state", state))
 
         self.finished_consensus.wait()
         
@@ -106,8 +104,7 @@ class CooperatingComputer(FlightComputer, Abstraction):
         self.finished_consensus.wait() # Last consensus
         self.finished_consensus.clear()
         
-        message = ("action", action)
-        self.erb.trigger_event(self.erb.BROADCAST, kwargs={"message": message})
+        self.broadcast(self.RECEIVE, args=("action", action))
 
         self.finished_consensus.wait()
         
@@ -116,6 +113,11 @@ class CooperatingComputer(FlightComputer, Abstraction):
 
     def node_decide_on_state(self, state):
         value = self.acceptable_state(state)
+        self.hco.trigger_event(self.hco.PROPOSE, kwargs={"value": value})
+
+
+    def node_decide_on_action(self, action):
+        value = self.acceptable_action(action)
         self.hco.trigger_event(self.hco.PROPOSE, kwargs={"value": value})
 
 
@@ -128,8 +130,3 @@ class CooperatingComputer(FlightComputer, Abstraction):
             elif proposition_type == "action":
                 self.deliver_action(value)
         self.finished_consensus.set()
-
-
-    def node_decide_on_action(self, action):
-        value = self.acceptable_action(action)
-        self.hco.trigger_event(self.hco.PROPOSE, kwargs={"value": value})

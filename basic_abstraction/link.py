@@ -9,7 +9,6 @@ from utils import Logging
 
 class PerfectLink(Abstraction):
     SEND = 0
-    DELIVER = 1
     MAX_LEN = 1024
 
     def __init__(self, process_number):
@@ -18,8 +17,7 @@ class PerfectLink(Abstraction):
         self.clients = []
         self.client_id = 0
         self.event_handler_map = {
-            self.SEND: self.send,
-            self.DELIVER: self.deliver
+            self.SEND: self.send
         }
         self.create_socket()
         self.listener = Thread(target=self.receive)
@@ -42,24 +40,19 @@ class PerfectLink(Abstraction):
         self.socket.bind(server_address)
         self.socket.settimeout(self.TIMEOUT)
 
-    def send(self, destination_process, client_id, message):
+    def send(self, destination_process, client_id, operation_id, args=(), kwargs={}):
         if self.alive:
-            message = (client_id, message)
+            message = (client_id, operation_id, args, kwargs)
             data = pickle.dumps(message)
             if len(data) > self.MAX_LEN:
                 raise Exception(f"Message exceding maximum length of {self.MAX_LEN} bytes, received {len(data)} bytes")
-            self.logger.log_debug(f"Sending {message[1]} to {destination_process}")
+            self.logger.log_debug(f"Sending {(operation_id, args, kwargs)} to {destination_process}")
             try:
                 self.socket.sendto(data, self.get_address(destination_process))
             except Exception as e:
                 self.logger.log_debug(f"Message {message[1]} for {destination_process} dropped")
         else:
             self.logger.log_debug(f"Not send {message[1]} to {destination_process}")
-
-    def deliver(self, source_number, client_id, message):
-        operation_id, data = message
-        message = (source_number, data)
-        self.clients[client_id].trigger_event(operation_id, message)
 
     def receive(self):
         while self.alive:
@@ -68,10 +61,10 @@ class PerfectLink(Abstraction):
             except socket.timeout:
                 continue
             else:
-                client_id, message = pickle.loads(data)
+                client_id, operation_id, args, kwargs = pickle.loads(data)
                 source_number = self.get_process(source)
-                self.logger.log_debug(f"Received {message} from {source_number}")
-                self.trigger_event(self.DELIVER, args=(source_number, client_id, message))
+                self.logger.log_debug(f"Received {(operation_id, args, kwargs)} from {source_number}")
+                self.clients[client_id].trigger_event(operation_id, args=(source_number, *args), kwargs=kwargs)
         self.socket.close()
         self.logger.log_debug(f"is done")
 
@@ -81,9 +74,9 @@ class PerfectLink(Abstraction):
         return self.generate_sender(self.client_id - 1)
 
     def generate_sender(self, client_id):
-        def send(destination_process, message):
-            self.trigger_event(self.SEND, args=(destination_process, client_id, message))
-        return send
+        def sender(destination_process, operation_id, args=(), kwargs={}):
+            self.trigger_event(self.SEND, args=(destination_process, client_id, operation_id, args, kwargs))
+        return sender
 
     def get_address(self, process_number):
         return f"/tmp/fairlosslink{process_number}.socket"
@@ -92,7 +85,6 @@ class PerfectLink(Abstraction):
         return int(re.findall("[0-9]+", address)[0])
 
 if __name__ == "__main__":
-    from queue import Queue
     import time
     class Test(Abstraction):
         PRINT = 0
@@ -105,9 +97,8 @@ if __name__ == "__main__":
                 self.PRINT_SPLIT: self.print_split_stuff
             }
             self.link = PerfectLink(process_number)
-            self.queue = Queue()
             self.send = self.link.register(self)
-            #self.link.debug = True
+            #Logging.set_debug(process_number, "LINK", True)
 
         def print_stuff(self, source_number, string):
             print(f"Got {string} from {source_number}")
@@ -128,8 +119,8 @@ if __name__ == "__main__":
     test1 = Test(1)
     test0.start()
     test1.start()
-    test1.send(0, (Test.PRINT, "Do this and that"))
-    test0.send(1, (Test.PRINT_SPLIT, "Do this and that"))
+    test1.send(0, Test.PRINT, args=("Do this and that",))
+    test0.send(1, Test.PRINT_SPLIT, args=("Do this and that",))
 
     time.sleep(1)
     test0.stop()

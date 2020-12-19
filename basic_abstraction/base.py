@@ -29,7 +29,7 @@ class Abstraction:
                     self.event_handler_map[event_flag](*args, **kwargs)
                 self.event_queue.task_done()
 
-    def trigger_event(self, event_flag, args=[], kwargs={}):
+    def trigger_event(self, event_flag, args=(), kwargs={}):
         self.event_queue.put((event_flag, args, kwargs))
 
 if __name__ == "__main__":
