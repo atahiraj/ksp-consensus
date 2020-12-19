@@ -82,7 +82,6 @@ class HierarchicalConsensus(Consensus):
             args = (self.proposal,)
             self.beb.trigger_event(self.beb.BROADCAST, args=args)
             self.abstraction_callback.trigger_event(self.operation_id_callback, args=args)
-            self.round_update()
 
     def round_update(self):
         while self.round < len(self.peers) and (self.round in self.detected or self.delivered[self.round]):
