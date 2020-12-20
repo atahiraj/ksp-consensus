@@ -33,10 +33,10 @@ class Abstraction:
         self.event_queue.put((event_name, args, kwargs))
 
     def sanitize_event(self, event):
-        if hasattr(event, "__name__"):
-            return event.__name__
-        elif isinstance(event, str):
+        if isinstance(event, str):
             return event
+        elif hasattr(event, "__name__"):
+            return event.__name__
         else:
             raise Exception("Events must be strings or have __name__ attr")
 
