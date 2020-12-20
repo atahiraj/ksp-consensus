@@ -16,9 +16,6 @@ class PerfectLink(Abstraction):
         self.process_number = process_number
         self.clients = []
         self.client_id = 0
-        self.event_handler_map = {
-            self.SEND: self.send
-        }
         self.create_socket()
         self.listener = Thread(target=self.receive)
         self.logger = Logging(self.process_number, "LINK")
@@ -40,13 +37,13 @@ class PerfectLink(Abstraction):
         self.socket.bind(server_address)
         self.socket.settimeout(self.TIMEOUT)
 
-    def send(self, destination_process, client_id, operation_id, args=(), kwargs={}):
+    def send(self, destination_process, client_id, event_name, args=(), kwargs={}):
         if self.alive:
-            message = (client_id, operation_id, args, kwargs)
+            message = (client_id, event_name, args, kwargs)
             data = pickle.dumps(message)
             if len(data) > self.MAX_LEN:
                 raise Exception(f"Message exceding maximum length of {self.MAX_LEN} bytes, received {len(data)} bytes")
-            self.logger.log_debug(f"Sending {(operation_id, args, kwargs)} to {destination_process}")
+            self.logger.log_debug(f"Sending {(event_name, args, kwargs)} to {destination_process}")
             try:
                 self.socket.sendto(data, self.get_address(destination_process))
             except Exception as e:
@@ -61,10 +58,10 @@ class PerfectLink(Abstraction):
             except socket.timeout:
                 continue
             else:
-                client_id, operation_id, args, kwargs = pickle.loads(data)
+                client_id, event_name, args, kwargs = pickle.loads(data)
                 source_number = self.get_process(source)
-                self.logger.log_debug(f"Received {(operation_id, args, kwargs)} from {source_number}")
-                self.clients[client_id].trigger_event(operation_id, args=(source_number, *args), kwargs=kwargs)
+                self.logger.log_debug(f"Received {(event_name, args, kwargs)} from {source_number}")
+                self.clients[client_id].trigger_event(event_name, args=(source_number, *args), kwargs=kwargs)
         self.socket.close()
         self.logger.log_debug(f"is done")
 
@@ -74,8 +71,9 @@ class PerfectLink(Abstraction):
         return self.generate_sender(self.client_id - 1)
 
     def generate_sender(self, client_id):
-        def sender(destination_process, operation_id, args=(), kwargs={}):
-            self.trigger_event(self.SEND, args=(destination_process, client_id, operation_id, args, kwargs))
+        def sender(destination_process, event, args=(), kwargs={}):
+            event_name = self.sanitize_event(event)
+            self.trigger_event(self.send, args=(destination_process, client_id, event_name, args, kwargs))
         return sender
 
     def get_address(self, process_number):
@@ -87,15 +85,8 @@ class PerfectLink(Abstraction):
 if __name__ == "__main__":
     import time
     class Test(Abstraction):
-        PRINT = 0
-        PRINT_SPLIT = 1
         def __init__(self, process_number):
             super().__init__()
-
-            self.event_handler_map = {
-                self.PRINT: self.print_stuff,
-                self.PRINT_SPLIT: self.print_split_stuff
-            }
             self.link = PerfectLink(process_number)
             self.send = self.link.register(self)
             #Logging.set_debug(process_number, "LINK", True)
@@ -119,8 +110,8 @@ if __name__ == "__main__":
     test1 = Test(1)
     test0.start()
     test1.start()
-    test1.send(0, Test.PRINT, args=("Do this and that",))
-    test0.send(1, Test.PRINT_SPLIT, args=("Do this and that",))
+    test1.send(0, Test.print_stuff, args=("Do this and that",))
+    test0.send(1, Test.print_split_stuff, args=("Do this and that",))
 
     time.sleep(1)
     test0.stop()

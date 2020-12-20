@@ -8,12 +8,11 @@ from basic_abstraction.base import Abstraction
 from utils import Logging
 
 class Consensus(Abstraction):
-    def __init__(self, link, abstraction_callback, operation_id_callback):
+    def __init__(self, link, abstraction_callback, event_callback):
         super().__init__()
         self.process_number = link.process_number
         self.abstraction_callback = abstraction_callback
-        self.operation_id_callback = operation_id_callback
-        self.send = link.register(self)
+        self.event_name_callback = self.sanitize_event(event_callback)
         self.logger = Logging(self.process_number, "HCO")
 
     def add_peers(peers_number_list):
@@ -23,19 +22,8 @@ class Consensus(Abstraction):
         return value
 
 class HierarchicalConsensus(Consensus):
-    PROPOSE = 0
-    RECEIVE = 1
-    PEER_FAILURE = 2
-    FINISHED = 3
-
-    def __init__(self, link, pfd, beb, abstraction_callback, operation_id_callback):
-        super().__init__(link, abstraction_callback, operation_id_callback)
-        self.event_handler_map = {
-            self.PROPOSE: self.propose,
-            self.RECEIVE: self.receive,
-            self.PEER_FAILURE: self.peer_failure,
-            self.FINISHED: self.finished
-        }
+    def __init__(self, link, pfd, beb, abstraction_callback, event_callback):
+        super().__init__(link, abstraction_callback, event_callback)
         self.link = link
         self.process_number = self.link.process_number
 
@@ -43,7 +31,7 @@ class HierarchicalConsensus(Consensus):
         self.broadcast = self.beb.register(self)
 
         self.pfd = pfd
-        self.pfd.register(self, self.PEER_FAILURE)
+        self.pfd.register(self, self.peer_failure)
         
         self.peers = {self.process_number}
         self.beb.add_peers(self.process_number)
@@ -83,11 +71,11 @@ class HierarchicalConsensus(Consensus):
             self.round += 1
         if self.round == len(self.peers):
             self.reset()
-            self.broadcast(self.FINISHED)
+            self.broadcast(self.finished)
         elif self.round == self.process_number and self.proposal and not self.broadcasting:
             self.broadcasting = True
             self.decided = self.proposal
-            self.broadcast(self.RECEIVE, args=(self.decided,))
+            self.broadcast(self.receive, args=(self.decided,))
 
     def receive(self, source_number, value):
         self.logger.log_debug(f"Process {source_number} has decided on {value}")
@@ -101,22 +89,18 @@ class HierarchicalConsensus(Consensus):
         self.finished_peers[source_number] = True
         if all(self.finished_peers.values()):
             self.logger.log_debug(f"Consensus finished")
-            self.abstraction_callback.trigger_event(self.operation_id_callback, kwargs={"value": self.decided})
+            self.abstraction_callback.trigger_event(self.event_name_callback, kwargs={"value": self.decided})
             self.finished_peers = {peer: False for peer in self.peers - self.detected}
 
 if __name__ == "__main__":
     class Test(Abstraction):
-        CONSENSUS = 0
         def __init__(self, process_number):
             super().__init__()
-            self.event_handler_map = {
-                self.CONSENSUS: self.consensus
-            }
             self.process_number = process_number
             self.link = PerfectLink(process_number)
             self.pfd = PerfectFailureDetector(self.link)
             self.beb = BestEffortBroadcast(self.link)
-            self.hco = HierarchicalConsensus(self.link, self.pfd, self.beb, self, self.CONSENSUS)
+            self.hco = HierarchicalConsensus(self.link, self.pfd, self.beb, self, self.consensus)
             #Logging.set_debug(self.process_number, "HCO", True)
 
         def start(self):
@@ -147,28 +131,28 @@ if __name__ == "__main__":
     test1.start()
     test2.start()
     
-    test0.hco.trigger_event(test0.hco.PROPOSE, kwargs={"value": "lol0"})
-    test1.hco.trigger_event(test0.hco.PROPOSE, kwargs={"value":"lil0"})
-    test2.hco.trigger_event(test0.hco.PROPOSE, kwargs={"value": "wsh0"})
+    test0.hco.trigger_event(test0.hco.propose, kwargs={"value": "lol0"})
+    test1.hco.trigger_event(test0.hco.propose, kwargs={"value":"lil0"})
+    test2.hco.trigger_event(test0.hco.propose, kwargs={"value": "wsh0"})
 
     time.sleep(0.5)
 
     test0.stop()
-    test0.hco.trigger_event(test0.hco.PROPOSE, kwargs={"value": "lol1"})
-    test1.hco.trigger_event(test0.hco.PROPOSE, kwargs={"value":"lil1"})
-    test2.hco.trigger_event(test0.hco.PROPOSE, kwargs={"value": "wsh1"})
+    test0.hco.trigger_event(test0.hco.propose, kwargs={"value": "lol1"})
+    test1.hco.trigger_event(test0.hco.propose, kwargs={"value":"lil1"})
+    test2.hco.trigger_event(test0.hco.propose, kwargs={"value": "wsh1"})
 
     time.sleep(0.5)
 
-    test0.hco.trigger_event(test0.hco.PROPOSE, kwargs={"value": "lol2"})
-    test1.hco.trigger_event(test0.hco.PROPOSE, kwargs={"value":"lil2"})
-    test2.hco.trigger_event(test0.hco.PROPOSE, kwargs={"value": "wsh2"})
+    test0.hco.trigger_event(test0.hco.propose, kwargs={"value": "lol2"})
+    test1.hco.trigger_event(test0.hco.propose, kwargs={"value":"lil2"})
+    test2.hco.trigger_event(test0.hco.propose, kwargs={"value": "wsh2"})
 
     time.sleep(0.5)
     test1.stop()
-    test0.hco.trigger_event(test0.hco.PROPOSE, kwargs={"value": "lol3"})
-    test1.hco.trigger_event(test0.hco.PROPOSE, kwargs={"value":"lil3"})
-    test2.hco.trigger_event(test0.hco.PROPOSE, kwargs={"value": "wsh3"})
+    test0.hco.trigger_event(test0.hco.propose, kwargs={"value": "lol3"})
+    test1.hco.trigger_event(test0.hco.propose, kwargs={"value":"lil3"})
+    test2.hco.trigger_event(test0.hco.propose, kwargs={"value": "wsh3"})
 
     time.sleep(0.5)
     test2.stop()

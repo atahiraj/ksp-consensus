@@ -5,16 +5,9 @@ from basic_abstraction.base import Abstraction
 from utils import Logging
 
 class PerfectFailureDetector(Abstraction):
-    # Heartbeats
-    REQUEST = 0
-    REPLY = 1
-    
+    # Heartbeats    
     def __init__(self, link):
         super().__init__()
-        self.event_handler_map = {
-            PerfectFailureDetector.REQUEST: self.request,
-            PerfectFailureDetector.REPLY: self.reply
-        }
         self.clients = []
         
         self.link = link
@@ -36,12 +29,13 @@ class PerfectFailureDetector(Abstraction):
     def add_peers(self, *peers):
         self.peers.update(peers)
 
-    def register(self, abstraction, operation_id):
-        self.clients.append((abstraction, operation_id))
+    def register(self, abstraction, event):
+        event_name = self.sanitize_event(event)
+        self.clients.append((abstraction, event_name))
 
     def request(self, source_number):
         self.logger.log_debug(f"Request from {source_number}")
-        self.send(source_number, self.REPLY)
+        self.send(source_number, self.reply)
 
     def reply(self, source_number):
         self.logger.log_debug(f"Reply from {source_number}")
@@ -56,7 +50,7 @@ class PerfectFailureDetector(Abstraction):
 
     def send_heartbeats(self):
         for peer in self.peers - self.detected:
-            self.send(peer, self.REQUEST)
+            self.send(peer, self.request)
 
     def timeout(self):
         with self.lock:
@@ -64,8 +58,8 @@ class PerfectFailureDetector(Abstraction):
                 self.detected.add(peer)
 
                 self.logger.log_debug(f"Peer {peer} crashed")
-                for (abstraction, operation_id) in self.clients:
-                    abstraction.trigger_event(operation_id, args=(peer,))
+                for (abstraction, event_name) in self.clients:
+                    abstraction.trigger_event(event_name, args=(peer,))
 
             self.correct.clear()
 
@@ -73,14 +67,12 @@ if __name__ == "__main__":
     from basic_abstraction.link import PerfectLink
     timescale = 0.1
     class Test(Abstraction):
-        CRASHED = 0
         def __init__(self, process_number):
             super().__init__()
-            self.event_handler_map = {self.CRASHED: self.crashed}
             self.link = PerfectLink(process_number)
             self.process_number = self.link.process_number
             self.pfd = PerfectFailureDetector(self.link)
-            self.pfd.register(self, self.CRASHED)
+            self.pfd.register(self, self.crashed)
             #Logging.set_debug(self.process_number, "PFD", True)
 
         def start(self):

@@ -11,28 +11,20 @@ from computer.base import FlightComputer
 from utils import Logging
 
 class CooperatingComputer(FlightComputer, Abstraction):
-    RECEIVE = 0
-    PEER_FAILURE = 1
-    CONSENSUS = 2
     def __init__(self, state, process_number):
         FlightComputer.__init__(self, state)
         Abstraction.__init__(self)
-        self.event_handler_map = {
-            self.RECEIVE: self.broadcast_receive,
-            self.PEER_FAILURE: self.peer_failure,
-            self.CONSENSUS: self.decided
-        }
         self.process_number = process_number
 
         self.link = PerfectLink(self.process_number)
         #self.send = self.link.register(self)
         self.pfd = PerfectFailureDetector(self.link)
-        self.pfd.register(self, self.PEER_FAILURE)
+        self.pfd.register(self, self.peer_failure)
         self.erb = EagerReliableBroadcast(self.link)
         self.broadcast = self.erb.register(self)
 
         self.beb = BestEffortBroadcast(self.link)
-        self.hco = HierarchicalConsensus(self.link, self.pfd, self.beb, self, self.CONSENSUS)
+        self.hco = HierarchicalConsensus(self.link, self.pfd, self.beb, self, self.decided)
 
         self.peers = {self.process_number}
         self.erb.add_peers(self.process_number)
@@ -93,7 +85,7 @@ class CooperatingComputer(FlightComputer, Abstraction):
         self.finished_consensus.wait() # Last consensus
         self.finished_consensus.clear()
         
-        self.broadcast(self.RECEIVE, args=("state", state))
+        self.broadcast(self.broadcast_receive, args=("state", state))
 
         self.finished_consensus.wait()
         
@@ -104,7 +96,7 @@ class CooperatingComputer(FlightComputer, Abstraction):
         self.finished_consensus.wait() # Last consensus
         self.finished_consensus.clear()
         
-        self.broadcast(self.RECEIVE, args=("action", action))
+        self.broadcast(self.broadcast_receive, args=("action", action))
 
         self.finished_consensus.wait()
         
@@ -113,12 +105,12 @@ class CooperatingComputer(FlightComputer, Abstraction):
 
     def node_decide_on_state(self, state):
         value = self.acceptable_state(state)
-        self.hco.trigger_event(self.hco.PROPOSE, kwargs={"value": value})
+        self.hco.trigger_event(self.hco.propose, kwargs={"value": value})
 
 
     def node_decide_on_action(self, action):
         value = self.acceptable_action(action)
-        self.hco.trigger_event(self.hco.PROPOSE, kwargs={"value": value})
+        self.hco.trigger_event(self.hco.propose, kwargs={"value": value})
 
 
     def decided(self, value):

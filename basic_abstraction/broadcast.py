@@ -4,14 +4,8 @@ from basic_abstraction.link import PerfectLink
 from utils import Logging
 
 class Broadcast(Abstraction):
-    BROADCAST = 0
-    RECEIVE = 1
     def __init__(self, link):
         super().__init__()
-        self.event_handler_map = {
-            Broadcast.BROADCAST: self.broadcast,
-            Broadcast.RECEIVE: self.receive
-        }
         self.peers = set()
         self.link = link
         self.process_number = self.link.process_number
@@ -19,10 +13,10 @@ class Broadcast(Abstraction):
         self.clients = []
         self.client_id = 0
 
-    def broadcast(self, client_id, operation_id, args=(), kwargs={}):
+    def broadcast(self, client_id, event_name, args=(), kwargs={}):
         pass
 
-    def receive(self, source_number, client_id, operation_id, args=(), kwargs={}):
+    def receive(self, source_number, client_id, event_name, args=(), kwargs={}):
         pass
 
     def add_peers(self, *peers):
@@ -34,8 +28,9 @@ class Broadcast(Abstraction):
         return self.generate_broadcaster(self.client_id - 1)
     
     def generate_broadcaster(self, client_id):
-        def broadcaster(operation_id, args=(), kwargs={}):
-            self.trigger_event(self.BROADCAST, args=(client_id, operation_id, args, kwargs))
+        def broadcaster(event, args=(), kwargs={}):
+            event_name = self.sanitize_event(event)
+            self.trigger_event(self.broadcast, args=(client_id, event_name, args, kwargs))
         return broadcaster
 
 class BestEffortBroadcast(Broadcast):
@@ -43,14 +38,14 @@ class BestEffortBroadcast(Broadcast):
         super().__init__(link)
         self.logger = Logging(self.process_number, "BEB")
 
-    def broadcast(self, client_id, operation_id, args=(), kwargs={}):
-        self.logger.log_debug(f"Broadcasting {(operation_id, args, kwargs)}")
+    def broadcast(self, client_id, event_name, args=(), kwargs={}):
+        self.logger.log_debug(f"Broadcasting {(event_name, args, kwargs)}")
         for peer in self.peers:
-            self.send(peer, self.RECEIVE, args=(client_id, operation_id, args, kwargs))
+            self.send(peer, self.receive, args=(client_id, event_name, args, kwargs))
 
-    def receive(self, source_number, client_id, operation_id, args=(), kwargs={}):
-        self.logger.log_debug(f"Receiving {(operation_id, args, kwargs)} from {source_number}")
-        self.clients[client_id].trigger_event(operation_id, args=(source_number, *args), kwargs=kwargs)
+    def receive(self, source_number, client_id, event_name, args=(), kwargs={}):
+        self.logger.log_debug(f"Receiving {(event_name, args, kwargs)} from {source_number}")
+        self.clients[client_id].trigger_event(event_name, args=(source_number, *args), kwargs=kwargs)
 
 class EagerReliableBroadcast(Broadcast):
     def __init__(self, link, max_concurrent_messages=20):
@@ -64,35 +59,31 @@ class EagerReliableBroadcast(Broadcast):
         self.delivered[self.delivered_cycle] = message
         self.delivered_cycle = (self.delivered_cycle + 1) % len(self.delivered)
 
-    def broadcast(self, client_id, operation_id, args=(), kwargs={}):
-        self.logger.log_debug(f"Broadcasting {(operation_id, args, kwargs)}")
-        message = (self.timestamp, self.process_number, client_id, operation_id, args, kwargs)
+    def broadcast(self, client_id, event_name, args=(), kwargs={}):
+        self.logger.log_debug(f"Broadcasting {(event_name, args, kwargs)}")
+        message = (self.timestamp, self.process_number, client_id, event_name, args, kwargs)
         self.timestamp += 1
         self._broadcast(message)
 
-    def receive(self, source_number, timestamp, original_source, client_id, operation_id, args=(), kwargs={}):
-        message = (timestamp, original_source, client_id, operation_id, args, kwargs)
+    def receive(self, source_number, timestamp, original_source, client_id, event_name, args=(), kwargs={}):
+        message = (timestamp, original_source, client_id, event_name, args, kwargs)
         if message not in self.delivered:
-            self.logger.log_debug(f"Receiving {(operation_id, args, kwargs)} from {original_source}")
+            self.logger.log_debug(f"Receiving {(event_name, args, kwargs)} from {original_source}")
             self.register_delivered(message)
-            self.clients[client_id].trigger_event(operation_id, args=(original_source, *args), kwargs=kwargs)
+            self.clients[client_id].trigger_event(event_name, args=(original_source, *args), kwargs=kwargs)
             self._broadcast(message)
 
     def _broadcast(self, message):
         for peer in self.peers:
-            self.send(peer, self.RECEIVE, args=message)
+            self.send(peer, self.receive, args=message)
 
 
 if (__name__ == "__main__"):
     import time
     print("STARTING BEB")
     class TestBEB(Abstraction):
-        DELIVER = 0
         def __init__(self, process_number):
             super().__init__()
-            self.event_handler_map = {
-                self.DELIVER: self.deliver
-            }
             self.process_number = process_number
             self.link = PerfectLink(self.process_number)
             self.beb = BestEffortBroadcast(self.link)
@@ -122,9 +113,9 @@ if (__name__ == "__main__"):
     test1.beb.add_peers(0, 1, 2)
     test2.beb.add_peers(0, 1, 2)
     
-    test0.broadcast(test0.DELIVER, args=("Hello",))
-    test1.broadcast(test0.DELIVER, args=("LEL",))
-    test2.broadcast(test0.DELIVER, args=("lolilol",))
+    test0.broadcast(TestBEB.deliver, args=("Hello",))
+    test1.broadcast(TestBEB.deliver, args=("LEL",))
+    test2.broadcast(TestBEB.deliver, args=("lolilol",))
 
     time.sleep(1)
     test0.stop()
@@ -133,14 +124,9 @@ if (__name__ == "__main__"):
 
     print()
     print("STARTING ERB")
-
     class TestERB(Abstraction):
-        DELIVER = 0
         def __init__(self, process_number):
             super().__init__()
-            self.event_handler_map = {
-                self.DELIVER: self.deliver
-            }
             self.process_number = process_number
             self.link = PerfectLink(self.process_number)
             self.erb = EagerReliableBroadcast(self.link)
@@ -171,9 +157,9 @@ if (__name__ == "__main__"):
     test0.erb.add_peers(2)
     test1.erb.add_peers(2)
     test2.erb.add_peers(0, 1, 2)
-    test0.broadcast(test0.DELIVER, args=("Hello",))
-    test1.broadcast(test0.DELIVER, args=("LEL",))
-    test2.broadcast(test0.DELIVER, args=("lolilol",))
+    test0.broadcast(TestERB.deliver, args=("Hello",))
+    test1.broadcast(TestERB.deliver, args=("LEL",))
+    test2.broadcast(TestERB.deliver, args=("lolilol",))
 
     time.sleep(1)
     test0.stop()

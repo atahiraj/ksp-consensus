@@ -9,7 +9,6 @@ class Abstraction:
         self.alive = True
         self.debug = False
         self.event_queue = Queue()
-        self.event_handler_map = None
         self.base_worker = Thread(target=self.run_tasks)
 
     def start(self):
@@ -21,43 +20,52 @@ class Abstraction:
     def run_tasks(self):
         while self.alive:
             try:
-                event_flag, args, kwargs = self.event_queue.get(timeout=self.TIMEOUT)
+                event_name, args, kwargs = self.event_queue.get(timeout=self.TIMEOUT)
             except Empty:
                 continue
             else:
                 if self.alive:
-                    self.event_handler_map[event_flag](*args, **kwargs)
+                    getattr(self, event_name)(*args, **kwargs)
                 self.event_queue.task_done()
 
-    def trigger_event(self, event_flag, args=(), kwargs={}):
-        self.event_queue.put((event_flag, args, kwargs))
+    def trigger_event(self, event, args=(), kwargs={}):
+        event_name = self.sanitize_event(event)
+        self.event_queue.put((event_name, args, kwargs))
+
+    def sanitize_event(self, event):
+        if hasattr(event, "__name__"):
+            return event.__name__
+        elif isinstance(event, str):
+            return event
+        else:
+            raise Exception("Events must be strings or have __name__ attr")
 
 if __name__ == "__main__":
     import time
-    def task0(string):
-        time.sleep(0.5)
-        print(f"task0: {string}")
+    class Test(Abstraction):
+        def task0(self, string):
+            time.sleep(0.5)
+            print(f"task0: {string}")
 
-    def task1(string):
-        time.sleep(0.5)
-        print(f"task1: {string}")
+        def task1(self, string):
+            time.sleep(0.5)
+            print(f"task1: {string}")
 
-    def task2(string):
-        time.sleep(0.5)
-        print(f"task2: {string}")
+        def task2(self, string):
+            time.sleep(0.5)
+            print(f"task2: {string}")
 
-    test = Abstraction()
+    test = Test()
     test.start()
-    test.event_handler_map = [task0, task1, task2]
     print("Adding hello")
-    test.trigger_event(0, args=["hello0"])
+    test.trigger_event(test.task0, args=["hello0"])
     print("Adding hello2")
-    test.trigger_event(1, args=["hello2"])
+    test.trigger_event(test.task1, args=["hello2"])
     print("Adding hello3")
-    test.trigger_event(2, args=["hello3"])
+    test.trigger_event(test.task2, args=["hello3"])
     test.event_queue.join()
 
     # Testing if it stops correctly
     test.alive = False
-    test.trigger_event(0, args=["helloX"])
+    test.trigger_event(test.task0, args=["helloX"])
     test.event_queue.join()
