@@ -3,3 +3,4 @@ from basic_abstraction.link import PerfectLink
 from basic_abstraction.broadcast import BestEffortBroadcast, EagerReliableBroadcast
 from basic_abstraction.failure_detectors import PerfectFailureDetector
 from basic_abstraction.consensus import HierarchicalConsensus
+from basic_abstraction.voting import MajorityVotingConsensus

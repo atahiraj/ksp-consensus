@@ -72,7 +72,8 @@ class HierarchicalConsensus(Consensus):
         if self.round == len(self.peers):
             self.reset()
             self.broadcast(self.finished)
-        elif self.round == self.process_number and self.proposal and not self.broadcasting:
+        elif self.round == self.process_number and self.proposal is not None and not self.broadcasting:
+            
             self.broadcasting = True
             self.decided = self.proposal
             self.broadcast(self.receive, args=(self.decided,))
