@@ -1,2 +1,2 @@
-from computer.base import FlightComputer
 from computer.cooperating import CooperatingComputer
+from computer.faulty import allocate_faulty_flight_computer

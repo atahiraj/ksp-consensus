@@ -5,9 +5,7 @@ import time
 import random
 import traceback
 
-from computer import *
-from faulty_computers import *
-
+from computer import CooperatingComputer, allocate_faulty_flight_computer
 
 # Load the pickle files
 actions = pickle.load(open("data/actions.pickle", "rb"))
@@ -41,10 +39,10 @@ def allocate_flight_computers(arguments):
     n_correct_fc = math.ceil(arguments.correct_fraction * n_fc)
     n_incorrect_fc = n_fc - n_correct_fc
     state = readout_state()
-    for _ in range(n_correct_fc):
-        flight_computers.append(CooperatingComputer(state, _))
-    for _ in range(n_incorrect_fc):
-        flight_computers.append(allocate_faulty_flight_computer(state))
+    for i in range(n_correct_fc):
+        flight_computers.append(CooperatingComputer(state, i))
+    for i in range(n_incorrect_fc):
+        flight_computers.append(allocate_faulty_flight_computer(state, i + n_correct_fc))
     # Add the peers for the consensus protocol
     for fc in flight_computers:
         for peer in flight_computers:
@@ -58,9 +56,10 @@ def allocate_flight_computers(arguments):
 
 # Connect with Kerbal Space Program
 flight_computers = allocate_flight_computers(arguments)
+alive_flight_computers = [*flight_computers]
 
 def select_leader():
-    return random.choice(flight_computers)
+    return random.choice(alive_flight_computers)
 
 
 def next_action(state):
@@ -84,17 +83,19 @@ try:
         leader = select_leader()
         state_decided = leader.decide_on_state(state)
         if not state_decided:
+            alive_flight_computers.remove(leader)
             continue
 
         action = leader.sample_next_action()
         if action is None:
             complete = True
             continue
-        if leader.decide_on_action(action):
-            if timestep % 1000 == 0:
-                print(f"{timestep}/{len(states)}")
+
+        action_decided = leader.decide_on_action(action)
+        if action_decided:
             execute_action(action)
         else:
+            alive_flight_computers.remove(leader)
             timestep -= 1
 
 except Exception as e:

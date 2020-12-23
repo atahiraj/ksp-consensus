@@ -1,6 +1,6 @@
 import time
 
-from basic_abstraction import MajorityVotingConsensus
+from .voting import MajorityVotingConsensus
 from .base import FlightComputer
 
 from utils import Logging
@@ -25,7 +25,7 @@ class CooperatingComputer(FlightComputer):
         self.majority_voting.stop()
 
     def decide_on_value(self, value):
-        vote_result = self.majority_voting.decide_on_value(value)
+        vote_result = self.majority_voting(value)
         return vote_result
 
     def decide_on_state(self, state):

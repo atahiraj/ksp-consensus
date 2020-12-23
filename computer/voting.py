@@ -1,11 +1,10 @@
 from threading import Event
 
-from basic_abstraction import Abstraction
-from basic_abstraction import PerfectLink
-from basic_abstraction import PerfectFailureDetector
-from basic_abstraction import BestEffortBroadcast, EagerReliableBroadcast
-from basic_abstraction import HierarchicalConsensus
-from computer.base import FlightComputer
+from basic_abstraction.base import Abstraction
+from basic_abstraction.link import PerfectLink
+from basic_abstraction.failure_detectors import PerfectFailureDetector
+from basic_abstraction.broadcast import BestEffortBroadcast, EagerReliableBroadcast
+from basic_abstraction.consensus import HierarchicalConsensus
 
 from utils import Logging
 
@@ -17,17 +16,19 @@ class MajorityVotingConsensus(Abstraction):
         self.deliver_callback = deliver_callback
 
         self.link = PerfectLink(self.process_number)
-        #self.send = self.link.register(self)
         self.pfd = PerfectFailureDetector(self.link)
         self.pfd.register(self, self.peer_failure)
         self.erb = EagerReliableBroadcast(self.link)
         self.broadcast = self.erb.register(self)
-
         self.beb = BestEffortBroadcast(self.link)
         self.hco = HierarchicalConsensus(self.link, self.pfd, self.beb, self, self.consensus_decided)
 
         self.peers = {self.process_number}
+        self.detected = set()
         self.erb.add_peers(self.process_number)
+
+        self.votes = {}
+        self.voted = {peer: False for peer in self.peers}
 
         self.finished_consensus = Event()
         self.finished_consensus.set()
@@ -42,6 +43,7 @@ class MajorityVotingConsensus(Abstraction):
         self.beb.add_peers(*peers)
         self.hco.add_peers(*peers)
         self.erb.add_peers(*peers)
+        self.voted.update({peer: False for peer in self.peers})
 
     def start(self):
         super().start()
@@ -50,7 +52,6 @@ class MajorityVotingConsensus(Abstraction):
         self.erb.start()
         self.beb.start()
         self.hco.start()
-        
 
     def stop(self):
         super().stop()
@@ -60,24 +61,44 @@ class MajorityVotingConsensus(Abstraction):
         self.beb.stop()
         self.hco.stop()
 
-    def decide_on_value(self, value):
-        self.logger.log_debug(f"New decide: {value}")
-        self.finished_consensus.wait() # Last consensus
+    def __call__(self, value):
+        self.logger.log_debug(f"New vote on: {value}")
+
+        # Waiting last consensus
+        if not self.finished_consensus.wait(self.TIMEOUT / 5): 
+            return False
         self.finished_consensus.clear()
         
-        self.broadcast(self.consensus_receive, kwargs={"value": value})
+        self.broadcast(self.new_vote, kwargs={"value": value})
 
-        self.finished_consensus.wait()
-        
+        if not self.finished_consensus.wait(self.TIMEOUT / 5):
+            return False
         return self.consensus_result
 
-    def consensus_receive(self, source_number, value):
-        self.logger.log_debug(f"Received {value} from {source_number}")
+    def new_vote(self, source_number, value):
+        self.logger.log_debug(f"Received new vote request {value} from {source_number}")
         self.finished_consensus.clear()
         self.proposition = value
-        proposal = self.decide_callback(value)
-        self.hco.trigger_event(self.hco.propose, kwargs={"value": proposal})
+        vote = self.decide_callback(value)
+        self.broadcast(self.vote_receive, kwargs={"vote": vote})
+    
+    def vote_receive(self, source_number, vote):
+        self.logger.log_debug(f"Received vote {vote} from {source_number}")
+        if vote in self.votes:
+            self.votes[vote] += 1
+        else:
+            self.votes[vote] = 1
+        self.finished_vote(source_number)
 
+    def finished_vote(self, process_number):
+        self.voted[process_number] = True
+        if all(self.voted.values()):
+            self.logger.log_debug(f"Voting finished: {self.votes}")
+            max_vote = max(self.votes, key=self.votes.get)
+            self.votes.clear()
+            self.voted = {peer: False for peer in self.peers - self.detected}
+            self.hco.trigger_event(self.hco.propose, kwargs={"value": max_vote})
+    
     def consensus_decided(self, value):
         self.logger.log_debug(f"Consensus decided on {value}")
         self.consensus_result = value
@@ -86,15 +107,16 @@ class MajorityVotingConsensus(Abstraction):
         self.finished_consensus.set()
 
     def peer_failure(self, process_number):
-        pass
-
+        self.logger.log_debug(f"Peer {process_number} crashed")
+        self.detected.add(process_number)
+        self.finished_vote(process_number)
 
 if __name__ == "__main__":
     class Test:
         def __init__(self, process_number):
             self.process_number = process_number
             self.majority_voting = MajorityVotingConsensus(process_number, self.decide, self.deliver)
-            Logging.set_debug(self.process_number, "HCO", True)
+            Logging.set_debug(self.process_number, "VOT", True)
             self.count = 0
 
         def add_peers(self, *peers):
@@ -110,22 +132,44 @@ if __name__ == "__main__":
                 return True
             else:
                 return False
-        
-    test0 = Test(0)
+
+    class BuggedTest(Test):
+        def __init__(self, process_number):
+            super().__init__(process_number)
+
+        def decide(self, value):
+            return not super().decide(value)
+    
+
+    test0 = BuggedTest(0)
     test1 = Test(1)
     test2 = Test(2)
 
     test0.add_peers(test1, test2)
     test1.add_peers(test0, test2)
     test2.add_peers(test0, test1)
-
+    
     test0.majority_voting.start()
     test1.majority_voting.start()
     test2.majority_voting.start()
 
-    decide = test0.majority_voting.decide_on_value("decrement")
-    decide = test0.majority_voting.decide_on_value("increment")
+    
+    if test0.majority_voting("decrement"):
+        raise Exception("A vote on 'decrement' should be False")
+    
+    test0.majority_voting.stop()
 
+    if not test1.majority_voting("increment"):
+        raise Exception("A vote on 'increment' should be True")
+
+    """
+    for i in range(20000):
+        print(i)
+        if test0.majority_voting("decrement"):
+            raise Exception("A vote on 'decrement' should be False")
+        if not test0.majority_voting("increment"):
+            raise Exception("A vote on 'increment' should be True")
+    """
 
     test0.majority_voting.stop()
     test1.majority_voting.stop()
