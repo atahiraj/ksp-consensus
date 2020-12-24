@@ -2,13 +2,28 @@ from threading import Event
 
 from basic_abstraction.base import Abstraction
 from basic_abstraction.link import PerfectLink
-from basic_abstraction.failure_detectors import PerfectFailureDetector
+from basic_abstraction.failure_detector import PerfectFailureDetector
 from basic_abstraction.broadcast import BestEffortBroadcast, EagerReliableBroadcast
 from basic_abstraction.consensus import HierarchicalConsensus
 
 from utils import Logging
 
+
 class MajorityVoting(Abstraction):
+    """This class implements a majority voting abstraction.
+
+    Uses:
+        - PerfectFailureDetector
+        - EagerReliableBroadcast
+        - HierchicalConsensus
+
+    Since this is the top-level class, it instantiates all the classes it
+    requires (and their requirements). It is also not meant to be used by an
+    abstraction (but still can), but by, say, a flight computer object. This
+    class is callable, and its entrypoint is its __call__ method.
+
+    """
+
     def __init__(self, process_number, decide_callback, deliver_callback):
         super().__init__()
         self.process_number = process_number
@@ -72,7 +87,7 @@ class MajorityVoting(Abstraction):
         if not self.finished_consensus.wait(self.TIMEOUT / 3):
             return False
         self.finished_consensus.clear()
-        
+
         self.broadcast(self.new_vote, kwargs={"value": value})
 
         if not self.finished_consensus.wait(self.TIMEOUT / 3):
@@ -85,7 +100,7 @@ class MajorityVoting(Abstraction):
         self.proposition = value
         vote = self.decide_callback(value)
         self.broadcast(self.vote_receive, kwargs={"vote": vote})
-    
+
     def vote_receive(self, source_number, vote):
         self.logger.log_debug(f"Received vote {vote} from {source_number}")
         if vote in self.votes:
@@ -102,7 +117,7 @@ class MajorityVoting(Abstraction):
             self.votes.clear()
             self.voted = {peer: False for peer in self.peers - self.detected}
             self.hco.trigger_event(self.hco.propose, kwargs={"value": max_vote})
-    
+
     def consensus_decided(self, value):
         self.logger.log_debug(f"Consensus decided on {value}")
         self.consensus_result = value
@@ -115,11 +130,15 @@ class MajorityVoting(Abstraction):
         self.detected.add(process_number)
         self.finished_vote(process_number)
 
+
 if __name__ == "__main__":
+
     class Test:
         def __init__(self, process_number):
             self.process_number = process_number
-            self.majority_voting = MajorityVotingConsensus(process_number, self.decide, self.deliver)
+            self.majority_voting = MajorityVotingConsensus(
+                process_number, self.decide, self.deliver
+            )
             Logging.set_debug(self.process_number, "VOT", True)
             self.count = 0
 
@@ -130,7 +149,7 @@ if __name__ == "__main__":
         def deliver(self, value):
             if value == "increment":
                 self.count += 1
-        
+
         def decide(self, value):
             if value == "increment":
                 return True
@@ -143,7 +162,6 @@ if __name__ == "__main__":
 
         def decide(self, value):
             return not super().decide(value)
-    
 
     test0 = BuggedTest(0)
     test1 = Test(1)
@@ -152,20 +170,18 @@ if __name__ == "__main__":
     test0.add_peers(test1, test2)
     test1.add_peers(test0, test2)
     test2.add_peers(test0, test1)
-    
+
     test0.majority_voting.start()
     test1.majority_voting.start()
     test2.majority_voting.start()
 
-    
     if test0.majority_voting("decrement"):
         raise Exception("A vote on 'decrement' should be False")
-    
+
     test0.majority_voting.stop()
 
     if not test1.majority_voting("increment"):
         raise Exception("A vote on 'increment' should be True")
-
 
     """
     for i in range(20000):

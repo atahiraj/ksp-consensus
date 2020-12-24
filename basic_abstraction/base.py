@@ -3,14 +3,21 @@ from queue import Queue, Empty
 
 from utils import Logging
 
+
 class Abstraction:
-    """ This class implements an abstracton.
+    """This class implements an abstracton.
 
     An abstraction consists in an event queue and a thread that executes these
-    events sequentially. Events are added through trigger_event method.
+    events sequentially. Events are added through trigger_event method. Events
+    correspond to one of the Abstraction's methods. For instance, a hierchical
+    consensus object would have a "propose" method, one would then trigger the
+    "propose" event to trigger the consensus. Events are triggered through the
+    method itself or its name (see below.)
 
     """
+
     TIMEOUT = 1
+
     def __init__(self):
         self.alive = True
         self.event_queue = Queue()
@@ -45,17 +52,25 @@ class Abstraction:
         else:
             raise Exception("Events must be strings or have __name__ attr")
 
+
 class Subscriptable(Abstraction):
-    """ This class implements a subscriptable abstraction.
+    """This class implements a subscriptable abstraction.
 
     Subscriptable abstractions are abstractions that remember multiple callbacks
-    and may call them all. Useful class for, say, a perfect failure detector.
+    and may call them all. This class was made a bit too generic as it supports
+    function callbacks although only triggering events is required in this
+    project.
+
+    Useful class for, say, a perfect failure detector. Multiple abstractions
+    would subscribe to a perfect failure detector by providing an event which is
+    to be triggered in case of peer failure.
 
     """
+
     def __init__(self):
         super().__init__()
         self.callbacks = []
-    
+
     def call_callbacks(self, *args, **kwargs):
         for callback in self.callbacks:
             callback(*args, **kwargs)
@@ -65,20 +80,40 @@ class Subscriptable(Abstraction):
 
     def subscribe_abstraction(self, abstraction, event):
         event_name = self.stringify_event(event)
+
         def callback(*args, **kwargs):
             abstraction.trigger_event(event_name, args=args, kwargs=kwargs)
+
         self.subscribe(callback)
 
+
 class Registrable(Abstraction):
-    """ This class implements a registrable abstraction.
+    """This class implements a registrable abstraction.
 
     Registrable abstrations are able to remember a list of clients and redirect
-    queries towards the said clients. Useful class for, say, links and
-    broadcasts. One has to implement generate_caller and
-    generate_abstraction_caller for functions and abstraction callbacks
-    respectively.
+    queries towards the said clients. This class was made a bit too generic as
+    it is meant to support non Abstraction clients.
+
+    The idea is to have registering methods returning wrappers around the
+    trigger_event method. The wrappers would then add the client_it to the
+    queries which are later used by this class to redirect the query to the
+    correct client.
+
+    This class was degined for links and broadcasts. Multiple abstractions would
+    need to use a link abstraction to communicate, but multiple link
+    abstractions might mean multiple unix sockets (see ./link.py). This class
+    helps multiple abstractions to communicate through the same link. For
+    instance, a perfect failure detector might register to a link to communicate
+    with the perfect failure detector of other peers. Using the wrapper
+    functions, the destination link can redirect a request from a remote perfect
+    link to the corresponding local perfect link (since peers are identical,
+    they would ave the same client id).
+
+    One has to implement generate_caller and generate_abstraction_caller for
+    functions and abstraction callbacks respectively.
 
     """
+
     def __init__(self):
         super().__init__()
         self.callbacks = []
@@ -96,6 +131,7 @@ class Registrable(Abstraction):
         def callback(event, *args, **kwargs):
             event_name = self.stringify_event(event)
             abstraction.trigger_event(event_name, args=args, kwargs=kwargs)
+
         self._register(callback)
         return self.generate_abstraction_caller(self.callback_id - 1)
 
@@ -108,8 +144,10 @@ class Registrable(Abstraction):
     def callback(self, callback_id, args=(), kwargs={}):
         self.callbacks[callback_id](*args, **kwargs)
 
+
 if __name__ == "__main__":
     import time
+
     class TestAbstr(Abstraction):
         def task0(self, string):
             time.sleep(0.5)
@@ -138,16 +176,15 @@ if __name__ == "__main__":
     test.trigger_event(test.task0, args=["helloX"])
     test.event_queue.join()
 
-
     # Testing subscriptable
     class TestSubscr(Abstraction):
         def __init__(self, number):
             super().__init__()
             self.number = number
-    
+
         def print_stuff(self):
             print(f"{self.number}: Hello!")
-    
+
     def callback():
         print("Function: Hello!")
 
@@ -184,9 +221,9 @@ if __name__ == "__main__":
                 event_name = self.stringify_event(event)
                 args = (event_name, *args)
                 self.trigger_event(self.entrypoint, args=(callback_id, args, kwargs))
+
             return caller
 
-    
     reg = TestRegistr()
     test0 = TestAbstr()
     reg.start()
@@ -196,7 +233,6 @@ if __name__ == "__main__":
     caller(event="task0", args=("Hellooooo0",))
     caller(test0.task1, args=("Hellooooo1",))
     caller(event=TestAbstr.task2, kwargs={"string": "Hellooooo2"})
-
 
     reg.event_queue.join()
     test0.event_queue.join()

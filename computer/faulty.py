@@ -3,7 +3,7 @@ import time
 
 from basic_abstraction.base import Abstraction
 from basic_abstraction.link import PerfectLink
-from basic_abstraction.failure_detectors import PerfectFailureDetector
+from basic_abstraction.failure_detector import PerfectFailureDetector
 from basic_abstraction.broadcast import BestEffortBroadcast, EagerReliableBroadcast
 from basic_abstraction.consensus import HierarchicalConsensus
 
@@ -11,8 +11,8 @@ from .cooperating import CooperatingComputer
 
 from basic_abstraction import PerfectLink
 
-class FullThrottleFlightComputer(CooperatingComputer):
 
+class FullThrottleFlightComputer(CooperatingComputer):
     def __init__(self, state, process_number):
         super(FullThrottleFlightComputer, self).__init__(state, process_number)
 
@@ -23,7 +23,6 @@ class FullThrottleFlightComputer(CooperatingComputer):
 
 
 class RandomThrottleFlightComputer(CooperatingComputer):
-
     def __init__(self, state, process_number):
         super(RandomThrottleFlightComputer, self).__init__(state, process_number)
 
@@ -35,10 +34,15 @@ class RandomThrottleFlightComputer(CooperatingComputer):
 
 
 class SlowFlightComputer(CooperatingComputer):
+    """ This class implements a slow flight computer.
 
+    To simulate a slow flight computer, we simply made the computer's link
+    abstraction sleep before sending data.
+
+    """
     class SlowPerfectLink(PerfectLink):
         def send(self, *args, **kwargs):
-            time.sleep(random.uniform(1, 10)) # Seconds
+            time.sleep(random.uniform(1, 10))  # Seconds
             super().send(*args, **kwargs)
 
     def __init__(self, state, process_number):
@@ -46,15 +50,14 @@ class SlowFlightComputer(CooperatingComputer):
         mv = self.majority_voting
         mv.link = SlowFlightComputer.SlowPerfectLink(process_number)
         mv.pfd = PerfectFailureDetector(mv.link)
-        mv.pfd.register(mv, mv.peer_failure)
+        mv.pfd.subscribe_abstraction(mv, mv.peer_failure)
         mv.erb = EagerReliableBroadcast(mv.link)
-        mv.broadcast = mv.erb.register(mv)
+        mv.broadcast = mv.erb.register_abstraction(mv)
         mv.beb = BestEffortBroadcast(mv.link)
-        mv.hco = HierarchicalConsensus(mv.link, mv.pfd, mv.beb, mv, mv.consensus_decided)
+        mv.hco.subscribe_abstraction(mv, mv.consensus_decided)
 
 
 class CrashingFlightComputer(CooperatingComputer):
-
     def __init__(self, state, process_number):
         super(CrashingFlightComputer, self).__init__(state, process_number)
 
@@ -65,7 +68,6 @@ class CrashingFlightComputer(CooperatingComputer):
             self.majority_voting.stop()
 
         return action
-
 
 
 def allocate_faulty_flight_computer(state, process_number):

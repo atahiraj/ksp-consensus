@@ -3,7 +3,19 @@ from basic_abstraction.link import PerfectLink
 
 from utils import Logging
 
+
 class Broadcast(Registrable):
+    """This abstract class implements a generic broadcast abstraction.
+
+    Uses:
+        - PerfectLink
+
+    It is a Registrable such that it may serve multiple abstractions. An
+    Abstraction object must go through the generate_abstraction_caller method
+    instead of using the broadcast method directly.
+
+    """
+
     def __init__(self, link):
         super().__init__()
         self.peers = set()
@@ -25,9 +37,18 @@ class Broadcast(Registrable):
             event_name = self.stringify_event(event)
             args = (event_name, self.process_number, *args)
             self.trigger_event(self.broadcast, args=(callback_id, args, kwargs))
+
         return broadcaster
 
+
 class BestEffortBroadcast(Broadcast):
+    """This class implements a best effort broadcast abstraction.
+
+    Uses:
+        - PerfectLink
+
+    """
+
     def __init__(self, link):
         super().__init__(link)
         self.logger = Logging(self.process_number, "BEB")
@@ -41,7 +62,19 @@ class BestEffortBroadcast(Broadcast):
         self.logger.log_debug(f"Receiving {(args, kwargs)} from {source_number}")
         self.callback(callback_id, args=args, kwargs=kwargs)
 
+
 class EagerReliableBroadcast(Broadcast):
+    """This class implements a eager reliable broadcast.
+
+    Uses:
+        - BestEffortBroadcast (in theory)
+        - PerfectLink (in practice)
+
+    This class does not use the BestEffortBroadcast class in its implementation
+    for convenience. It acts as if, though.
+
+    """
+
     def __init__(self, link, max_concurrent_messages=20):
         super().__init__(link)
         self.delivered = [None] * max_concurrent_messages
@@ -59,7 +92,9 @@ class EagerReliableBroadcast(Broadcast):
         self.timestamp += 1
         self._broadcast(message)
 
-    def receive(self, source_number, timestamp, original_source, callback_id, args=(), kwargs={}):
+    def receive(
+        self, source_number, timestamp, original_source, callback_id, args=(), kwargs={}
+    ):
         message = (timestamp, original_source, callback_id, args, kwargs)
         if message not in self.delivered:
             self.logger.log_debug(f"Receiving {(args, kwargs)} from {original_source}")
@@ -72,10 +107,12 @@ class EagerReliableBroadcast(Broadcast):
             self.send(peer, self.receive, args=message)
 
 
-if (__name__ == "__main__"):
+if __name__ == "__main__":
     import time
     from basic_abstraction.base import Abstraction
+
     print("STARTING BEB")
+
     class TestBEB(Abstraction):
         def __init__(self, process_number):
             super().__init__()
@@ -96,7 +133,6 @@ if (__name__ == "__main__"):
             super().stop()
             self.link.stop()
             self.beb.stop()
-            
 
     test0 = TestBEB(0)
     test1 = TestBEB(1)
@@ -107,7 +143,7 @@ if (__name__ == "__main__"):
     test0.beb.add_peers(0, 1, 2)
     test1.beb.add_peers(0, 1, 2)
     test2.beb.add_peers(0, 1, 2)
-    
+
     test0.broadcast(TestBEB.deliver, args=("Hello",))
     test1.broadcast(TestBEB.deliver, args=("LEL",))
     test2.broadcast(TestBEB.deliver, args=("lolilol",))
@@ -119,6 +155,7 @@ if (__name__ == "__main__"):
 
     print()
     print("STARTING ERB")
+
     class TestERB(Abstraction):
         def __init__(self, process_number):
             super().__init__()
@@ -126,7 +163,7 @@ if (__name__ == "__main__"):
             self.link = PerfectLink(self.process_number)
             self.erb = EagerReliableBroadcast(self.link)
             self.broadcast = self.erb.register_abstraction(self)
-            #Logging.set_debug(self.process_number, "LINK", True)
+            # Logging.set_debug(self.process_number, "LINK", True)
 
         def deliver(self, source_number, message):
             print(f"{self.process_number}: {message} from {source_number}")
@@ -141,11 +178,10 @@ if (__name__ == "__main__"):
             self.link.stop()
             self.erb.stop()
 
-    
     test0 = TestERB(0)
     test1 = TestERB(1)
     test2 = TestERB(2)
-    
+
     test0.start()
     test1.start()
     test2.start()
@@ -160,4 +196,3 @@ if (__name__ == "__main__"):
     test0.stop()
     test1.stop()
     test2.stop()
-

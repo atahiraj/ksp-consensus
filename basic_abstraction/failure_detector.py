@@ -4,8 +4,21 @@ import time
 from basic_abstraction.base import Subscriptable
 from utils import Logging
 
+
 class PerfectFailureDetector(Subscriptable):
-    # Heartbeats    
+    """This class implements the perfect failure detector abstraction.
+
+    Uses:
+        - PërfectLink
+
+    This class uses hearbeats that require a response. If no response frome a
+    peer came back in time, the peer is assumed to have failed. When a peer
+    fails, the subscribed callbacks are called. Timeout is chosen to be the
+    Abstraction class' TIMEOUT attribute divided by 10. Perhaps taking twice the
+    round-trip delay time would have been a better idea?
+
+    """
+
     def __init__(self, link):
         super().__init__()
         self.link = link
@@ -39,7 +52,7 @@ class PerfectFailureDetector(Subscriptable):
     def detect_failures(self):
         while self.alive:
             self.send_heartbeats()
-            time.sleep(self.TIMEOUT/10)
+            time.sleep(self.TIMEOUT / 10)
             self.timeout()
 
     def send_heartbeats(self):
@@ -56,10 +69,13 @@ class PerfectFailureDetector(Subscriptable):
 
             self.correct.clear()
 
+
 if __name__ == "__main__":
     from basic_abstraction.base import Abstraction
     from basic_abstraction.link import PerfectLink
+
     timescale = 0.1
+
     class Test(Abstraction):
         def __init__(self, process_number):
             super().__init__()
@@ -67,7 +83,7 @@ if __name__ == "__main__":
             self.process_number = self.link.process_number
             self.pfd = PerfectFailureDetector(self.link)
             self.pfd.subscribe_abstraction(self, self.crashed)
-            #Logging.set_debug(self.process_number, "PFD", True)
+            # Logging.set_debug(self.process_number, "PFD", True)
 
         def start(self):
             super().start()
@@ -82,7 +98,6 @@ if __name__ == "__main__":
         def crashed(self, peer):
             print(f"{self.link.process_number}: peer {peer} crashed")
 
-
     test0 = Test(0)
     test1 = Test(1)
     test2 = Test(2)
@@ -93,10 +108,10 @@ if __name__ == "__main__":
     test0.start()
     test1.start()
     test2.start()
-    
-    time.sleep(15*timescale)
+
+    time.sleep(15 * timescale)
     test1.stop()
-    time.sleep(15*timescale)
+    time.sleep(15 * timescale)
     test0.stop()
-    time.sleep(15*timescale)
+    time.sleep(15 * timescale)
     test2.stop()
