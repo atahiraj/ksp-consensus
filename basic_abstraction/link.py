@@ -4,18 +4,16 @@ import pickle
 import os
 from threading import Thread
 
-from basic_abstraction.base import Abstraction
+from basic_abstraction.base import Registrable
 from utils import Logging
 
-class PerfectLink(Abstraction):
+class PerfectLink(Registrable):
     SEND = 0
     MAX_LEN = 1024
 
     def __init__(self, process_number):
         super().__init__()
         self.process_number = process_number
-        self.clients = []
-        self.client_id = 0
         self.create_socket()
         self.listener = Thread(target=self.receive)
         self.logger = Logging(self.process_number, "LINK")
@@ -37,19 +35,19 @@ class PerfectLink(Abstraction):
         self.socket.bind(server_address)
         self.socket.settimeout(self.TIMEOUT)
 
-    def send(self, destination_process, client_id, event_name, args=(), kwargs={}):
+    def send(self, destination_process, callback_id, args=(), kwargs={}):
         if self.alive:
-            message = (client_id, event_name, args, kwargs)
+            message = (callback_id, args, kwargs)
             data = pickle.dumps(message)
             if len(data) > self.MAX_LEN:
                 raise Exception(f"Message exceding maximum length of {self.MAX_LEN} bytes, received {len(data)} bytes")
-            self.logger.log_debug(f"Sending {(event_name, args, kwargs)} to {destination_process}")
+            self.logger.log_debug(f"Sending {(args, kwargs)} to {destination_process}")
             try:
                 self.socket.sendto(data, self.get_address(destination_process))
             except Exception as e:
-                self.logger.log_debug(f"Message {message[1]} for {destination_process} dropped")
+                self.logger.log_debug(f"Message {message} for {destination_process} dropped")
         else:
-            self.logger.log_debug(f"Not send {message[1]} to {destination_process}")
+            self.logger.log_debug(f"Not send {message} to {destination_process}")
 
     def receive(self):
         while self.alive:
@@ -58,22 +56,18 @@ class PerfectLink(Abstraction):
             except socket.timeout:
                 continue
             else:
-                client_id, event_name, args, kwargs = pickle.loads(data)
+                callback_id, args, kwargs = pickle.loads(data)
                 source_number = self.get_process(source)
-                self.logger.log_debug(f"Received {(event_name, args, kwargs)} from {source_number}")
-                self.clients[client_id].trigger_event(event_name, args=(source_number, *args), kwargs=kwargs)
+                self.logger.log_debug(f"Received {(args, kwargs)} from {source_number}")
+                self.callback(callback_id, args=args, kwargs=kwargs)
         self.socket.close()
         self.logger.log_debug(f"is done")
 
-    def register(self, client):
-        self.clients.append(client)
-        self.client_id += 1
-        return self.generate_sender(self.client_id - 1)
-
-    def generate_sender(self, client_id):
+    def generate_abstraction_caller(self, callback_id):
         def sender(destination_process, event, args=(), kwargs={}):
-            event_name = self.sanitize_event(event)
-            self.trigger_event(self.send, args=(destination_process, client_id, event_name, args, kwargs))
+            event_name = self.stringify_event(event)
+            args = (event_name, self.process_number, *args)
+            self.trigger_event(self.send, args=(destination_process, callback_id, args, kwargs))
         return sender
 
     def get_address(self, process_number):
@@ -84,11 +78,12 @@ class PerfectLink(Abstraction):
 
 if __name__ == "__main__":
     import time
+    from basic_abstraction.base import Abstraction
     class Test(Abstraction):
         def __init__(self, process_number):
             super().__init__()
             self.link = PerfectLink(process_number)
-            self.send = self.link.register(self)
+            self.send = self.link.register_abstraction(self)
             #Logging.set_debug(process_number, "LINK", True)
 
         def print_stuff(self, source_number, string):

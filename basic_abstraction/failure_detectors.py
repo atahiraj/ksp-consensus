@@ -1,18 +1,16 @@
 from threading import Thread, Lock
 import time
 
-from basic_abstraction.base import Abstraction
+from basic_abstraction.base import Subscriptable
 from utils import Logging
 
-class PerfectFailureDetector(Abstraction):
+class PerfectFailureDetector(Subscriptable):
     # Heartbeats    
     def __init__(self, link):
         super().__init__()
-        self.clients = []
-        
         self.link = link
         self.process_number = self.link.process_number
-        self.send = self.link.register(self)
+        self.send = self.link.register_abstraction(self)
 
         self.peers = set()
         self.detected = set()
@@ -28,10 +26,6 @@ class PerfectFailureDetector(Abstraction):
 
     def add_peers(self, *peers):
         self.peers.update(peers)
-
-    def register(self, abstraction, event):
-        event_name = self.sanitize_event(event)
-        self.clients.append((abstraction, event_name))
 
     def request(self, source_number):
         self.logger.log_debug(f"Request from {source_number}")
@@ -58,12 +52,12 @@ class PerfectFailureDetector(Abstraction):
                 self.detected.add(peer)
 
                 self.logger.log_debug(f"Peer {peer} crashed")
-                for (abstraction, event_name) in self.clients:
-                    abstraction.trigger_event(event_name, args=(peer,))
+                self.call_callbacks(peer)
 
             self.correct.clear()
 
 if __name__ == "__main__":
+    from basic_abstraction.base import Abstraction
     from basic_abstraction.link import PerfectLink
     timescale = 0.1
     class Test(Abstraction):
@@ -72,7 +66,7 @@ if __name__ == "__main__":
             self.link = PerfectLink(process_number)
             self.process_number = self.link.process_number
             self.pfd = PerfectFailureDetector(self.link)
-            self.pfd.register(self, self.crashed)
+            self.pfd.subscribe_abstraction(self, self.crashed)
             #Logging.set_debug(self.process_number, "PFD", True)
 
         def start(self):

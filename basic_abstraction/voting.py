@@ -8,7 +8,7 @@ from basic_abstraction.consensus import HierarchicalConsensus
 
 from utils import Logging
 
-class MajorityVotingConsensus(Abstraction):
+class MajorityVoting(Abstraction):
     def __init__(self, process_number, decide_callback, deliver_callback):
         super().__init__()
         self.process_number = process_number
@@ -16,12 +16,16 @@ class MajorityVotingConsensus(Abstraction):
         self.deliver_callback = deliver_callback
 
         self.link = PerfectLink(self.process_number)
+
         self.pfd = PerfectFailureDetector(self.link)
-        self.pfd.register(self, self.peer_failure)
+        self.pfd.subscribe_abstraction(self, self.peer_failure)
+
         self.erb = EagerReliableBroadcast(self.link)
-        self.broadcast = self.erb.register(self)
+        self.broadcast = self.erb.register_abstraction(self)
+
         self.beb = BestEffortBroadcast(self.link)
-        self.hco = HierarchicalConsensus(self.link, self.pfd, self.beb, self, self.consensus_decided)
+        self.hco = HierarchicalConsensus(self.link, self.pfd, self.beb)
+        self.hco.subscribe_abstraction(self, self.consensus_decided)
 
         self.peers = {self.process_number}
         self.detected = set()
@@ -65,13 +69,13 @@ class MajorityVotingConsensus(Abstraction):
         self.logger.log_debug(f"New vote on: {value}")
 
         # Waiting last consensus
-        if not self.finished_consensus.wait(self.TIMEOUT / 5): 
+        if not self.finished_consensus.wait(self.TIMEOUT / 3):
             return False
         self.finished_consensus.clear()
         
         self.broadcast(self.new_vote, kwargs={"value": value})
 
-        if not self.finished_consensus.wait(self.TIMEOUT / 5):
+        if not self.finished_consensus.wait(self.TIMEOUT / 3):
             return False
         return self.consensus_result
 
@@ -161,6 +165,7 @@ if __name__ == "__main__":
 
     if not test1.majority_voting("increment"):
         raise Exception("A vote on 'increment' should be True")
+
 
     """
     for i in range(20000):

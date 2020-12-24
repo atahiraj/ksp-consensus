@@ -3,35 +3,30 @@ import time
 from basic_abstraction.broadcast import BestEffortBroadcast
 from basic_abstraction.failure_detectors import PerfectFailureDetector
 from basic_abstraction.link import PerfectLink
-from basic_abstraction.base import Abstraction
+from basic_abstraction.base import Subscriptable
 
 from utils import Logging
 
-class Consensus(Abstraction):
-    def __init__(self, link, abstraction_callback, event_callback):
+class Consensus(Subscriptable):
+    def __init__(self, link,):
         super().__init__()
+        self.link = link
         self.process_number = link.process_number
-        self.abstraction_callback = abstraction_callback
-        self.event_name_callback = self.sanitize_event(event_callback)
-        self.logger = Logging(self.process_number, "HCO")
 
-    def add_peers(peers_number_list):
+    def add_peers(self, *peers):
         pass
 
     def propose(self, value):
-        return value
+        pass
 
 class HierarchicalConsensus(Consensus):
-    def __init__(self, link, pfd, beb, abstraction_callback, event_callback):
-        super().__init__(link, abstraction_callback, event_callback)
-        self.link = link
-        self.process_number = self.link.process_number
-
+    def __init__(self, link, pfd, beb):
+        super().__init__(link)
         self.beb = beb
-        self.broadcast = self.beb.register(self)
+        self.broadcast = self.beb.register_abstraction(self)
 
         self.pfd = pfd
-        self.pfd.register(self, self.peer_failure)
+        self.pfd.subscribe_abstraction(self, self.peer_failure)
         
         self.peers = {self.process_number}
         self.beb.add_peers(self.process_number)
@@ -39,6 +34,8 @@ class HierarchicalConsensus(Consensus):
 
         self.reset()
         self.finished_peers = {peer: False for peer in self.peers}
+
+        self.logger = Logging(self.process_number, "HCO")
 
     def reset(self):
         self.round = 0
@@ -73,7 +70,6 @@ class HierarchicalConsensus(Consensus):
             self.reset()
             self.broadcast(self.finished)
         elif self.round == self.process_number and self.proposal is not None and not self.broadcasting:
-            
             self.broadcasting = True
             self.decided = self.proposal
             self.broadcast(self.receive, args=(self.decided,))
@@ -90,10 +86,11 @@ class HierarchicalConsensus(Consensus):
         self.finished_peers[source_number] = True
         if all(self.finished_peers.values()):
             self.logger.log_debug(f"Consensus finished")
-            self.abstraction_callback.trigger_event(self.event_name_callback, kwargs={"value": self.decided})
+            self.call_callbacks(self.decided)
             self.finished_peers = {peer: False for peer in self.peers - self.detected}
 
 if __name__ == "__main__":
+    from basic_abstraction.base import Abstraction
     class Test(Abstraction):
         def __init__(self, process_number):
             super().__init__()
@@ -101,7 +98,8 @@ if __name__ == "__main__":
             self.link = PerfectLink(process_number)
             self.pfd = PerfectFailureDetector(self.link)
             self.beb = BestEffortBroadcast(self.link)
-            self.hco = HierarchicalConsensus(self.link, self.pfd, self.beb, self, self.consensus)
+            self.hco = HierarchicalConsensus(self.link, self.pfd, self.beb)
+            self.hco.subscribe_abstraction(self, self.consensus)
             #Logging.set_debug(self.process_number, "HCO", True)
 
         def start(self):

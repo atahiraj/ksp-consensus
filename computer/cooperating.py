@@ -1,6 +1,6 @@
 import time
 
-from .voting import MajorityVotingConsensus
+from basic_abstraction import MajorityVoting
 from .base import FlightComputer
 
 from utils import Logging
@@ -9,7 +9,7 @@ class CooperatingComputer(FlightComputer):
     def __init__(self, state, process_number):
         super().__init__(state)
         self.process_number = process_number
-        self.majority_voting = MajorityVotingConsensus(process_number, self.acceptable_value, self.deliver_value)
+        self.majority_voting = MajorityVoting(process_number, self.acceptable_value, self.deliver_value)
         #Logging.set_debug(self.process_number, "VOT", True)
         #Logging.set_debug(self.process_number, "HCO", True)
 
