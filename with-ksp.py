@@ -1,10 +1,10 @@
 import argparse
 import krpc
 import math
-import numpy as np
 import time
+import random
 
-from computers import *
+from computer import CooperatingComputer, allocate_faulty_flight_computer
 
 
 # Argument parsing
@@ -61,26 +61,27 @@ def allocate_flight_computers(arguments):
     n_correct_fc = math.ceil(arguments.correct_fraction * n_fc)
     n_incorrect_fc = n_fc - n_correct_fc
     state = readout_state()
-    for _ in range(n_correct_fc):
-        flight_computers.append(FlightComputer(state))
-    for _ in range(n_incorrect_fc):
-        flight_computers.append(allocate_random_flight_computer(state))
+    for i in range(n_correct_fc):
+        flight_computers.append(CooperatingComputer(state, i))
+    for i in range(n_incorrect_fc):
+        flight_computers.append(allocate_faulty_flight_computer(state, i + n_correct_fc))
     # Add the peers for the consensus protocol
     for fc in flight_computers:
         for peer in flight_computers:
             if fc != peer:
-                fc.add_peer(peer)
+                fc.add_peers(peer)
+    for fc in flight_computers:
+        fc.start()
+
 
     return flight_computers
 
 # Connect with Kerbal Space Program
 flight_computers = allocate_flight_computers(arguments)
-
+alive_flight_computers = [*flight_computers]
 
 def select_leader():
-    leader_index = np.random.randint(0, len(flight_computers))
-
-    return flight_computers[leader_index]
+    return random.choice(alive_flight_computers)
 
 
 def next_action(state):
@@ -127,3 +128,6 @@ while not complete:
         execute_action(action)
 
 print("Hopefully in orbit!")
+
+for fc in flight_computers:
+    fc.stop()

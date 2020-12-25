@@ -48,13 +48,16 @@ class SlowFlightComputer(CooperatingComputer):
     def __init__(self, state, process_number):
         super(SlowFlightComputer, self).__init__(state, process_number)
         mv = self.majority_voting
-        mv.link = SlowFlightComputer.SlowPerfectLink(process_number)
+        mv.link = SlowFlightComputer.SlowPerfectLink(mv.process_number)
         mv.pfd = PerfectFailureDetector(mv.link)
         mv.pfd.subscribe_abstraction(mv, mv.peer_failure)
         mv.erb = EagerReliableBroadcast(mv.link)
         mv.broadcast = mv.erb.register_abstraction(mv)
         mv.beb = BestEffortBroadcast(mv.link)
+        mv.hco = HierarchicalConsensus(mv.link, mv.pfd, mv.beb)
         mv.hco.subscribe_abstraction(mv, mv.consensus_decided)
+        mv.peers = {mv.process_number}
+        mv.erb.add_peers(mv.process_number)
 
 
 class CrashingFlightComputer(CooperatingComputer):

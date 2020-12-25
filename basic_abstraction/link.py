@@ -46,8 +46,8 @@ class PerfectLink(Registrable):
         self.socket.settimeout(self.TIMEOUT)
 
     def send(self, destination_process, callback_id, args=(), kwargs={}):
+        message = (callback_id, args, kwargs)
         if self.alive:
-            message = (callback_id, args, kwargs)
             data = pickle.dumps(message)
             if len(data) > self.MAX_LEN:
                 raise Exception(
