@@ -128,6 +128,7 @@ class MajorityVoting(Abstraction):
     def peer_failure(self, process_number):
         self.logger.log_debug(f"Peer {process_number} crashed")
         self.detected.add(process_number)
+        self.erb.peers.remove(process_number)
         self.finished_vote(process_number)
 
 
