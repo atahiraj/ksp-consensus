@@ -18,7 +18,8 @@ class FullThrottleFlightComputer(CooperatingComputer):
 
     def sample_next_action(self):
         action = super(FullThrottleFlightComputer, self).sample_next_action()
-        action["throttle"] = 1.0
+        if action:
+            action["throttle"] = 1.0
         return action
 
 
@@ -28,8 +29,8 @@ class RandomThrottleFlightComputer(CooperatingComputer):
 
     def sample_next_action(self):
         action = super(RandomThrottleFlightComputer, self).sample_next_action()
-        action["throttle"] = random.uniform(0, 1)
-
+        if action:
+            action["throttle"] = random.uniform(0, 1)
         return action
 
 
