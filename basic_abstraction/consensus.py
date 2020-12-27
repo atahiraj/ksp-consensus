@@ -100,6 +100,8 @@ class HierarchicalConsensus(Consensus):
             self.broadcast(self.receive, args=(self.decided,))
 
     def receive(self, source_number, value):
+        if source_number in self.detected:
+            return
         self.logger.log_debug(f"Process {source_number} has decided on {value}")
         if source_number < self.process_number and source_number > self.proposer:
             self.proposal = value

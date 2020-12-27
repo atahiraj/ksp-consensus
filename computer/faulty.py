@@ -1,11 +1,12 @@
 import random
 import time
 
-from basic_abstraction.base import Abstraction
-from basic_abstraction.link import PerfectLink
-from basic_abstraction.failure_detector import PerfectFailureDetector
-from basic_abstraction.broadcast import BestEffortBroadcast, EagerReliableBroadcast
-from basic_abstraction.consensus import HierarchicalConsensus
+from basic_abstraction import Abstraction
+from basic_abstraction import PerfectLink
+from basic_abstraction import PerfectFailureDetector
+from basic_abstraction import BestEffortBroadcast, EagerReliableBroadcast
+from basic_abstraction import LeaderElection
+from basic_abstraction import HierarchicalConsensus
 
 from .cooperating import CooperatingComputer
 
@@ -59,6 +60,9 @@ class SlowFlightComputer(CooperatingComputer):
         mv.hco.subscribe_abstraction(mv, mv.consensus_decided)
         mv.peers = {mv.process_number}
         mv.erb.add_peers(mv.process_number)
+        mv.lel_hco = HierarchicalConsensus(mv.link, mv.pfd, mv.beb)
+        mv.lel = LeaderElection(mv.pfd, mv.lel_hco)
+        mv.lel.subscribe_abstraction(mv, mv.new_leader)
 
 
 class CrashingFlightComputer(CooperatingComputer):
@@ -81,4 +85,6 @@ def allocate_faulty_flight_computer(state, process_number):
         SlowFlightComputer,
         CrashingFlightComputer,
     ]
-    return random.choice(computers)(state, process_number)
+    kls = random.choice(computers)
+    print(f"Process {process_number} is faulty: {kls.__name__}")
+    return kls(state, process_number)

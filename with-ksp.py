@@ -56,32 +56,43 @@ def execute_action(action):
 
 
 def allocate_flight_computers(arguments):
-    flight_computers = []
     n_fc = arguments.flight_computers
     n_correct_fc = math.ceil(arguments.correct_fraction * n_fc)
     n_incorrect_fc = n_fc - n_correct_fc
     state = readout_state()
-    for i in range(n_correct_fc):
-        flight_computers.append(CooperatingComputer(state, i))
-    for i in range(n_incorrect_fc):
-        flight_computers.append(allocate_faulty_flight_computer(state, i + n_correct_fc))
+
+    flight_computers = {}
+    keys = list(range(n_fc))
+    random.shuffle(keys)
+
+    for i, key in enumerate(keys):
+        if i < n_correct_fc:
+            flight_computers[key] = CooperatingComputer(state, key)
+        else:
+            flight_computers[key] = allocate_faulty_flight_computer(state, key)
+
     # Add the peers for the consensus protocol
-    for fc in flight_computers:
-        for peer in flight_computers:
+    for fc in flight_computers.values():
+        for peer in flight_computers.values():
             if fc != peer:
                 fc.add_peers(peer)
-    for fc in flight_computers:
+    for fc in flight_computers.values():
         fc.start()
-
 
     return flight_computers
 
 # Connect with Kerbal Space Program
 flight_computers = allocate_flight_computers(arguments)
-alive_flight_computers = [*flight_computers]
+
 
 def select_leader():
-    return random.choice(alive_flight_computers)
+    counts = {fc.process_number: 0 for fc in flight_computers.values()}
+    for fc in flight_computers.values():
+        local_leader = fc.get_leader()
+        if local_leader is not None:
+            counts[local_leader] += 1
+    actual_leader = max(counts, key=counts.get)
+    return flight_computers[actual_leader]
 
 
 def next_action(state):
@@ -115,19 +126,26 @@ vessel.control.rcs = True
 execute_action(action)
 
 complete = False
+leader = select_leader()
 while not complete:
     state = readout_state()
-    leader = select_leader()
     state_decided = leader.decide_on_state(state)
     if not state_decided:
+        leader.stop()
+        leader = select_leader()
         continue
     action = leader.sample_next_action()
     if action is None:
         complete = True
-    if action is not None and leader.decide_on_action(action):
+        continue
+
+    if leader.decide_on_action(action):
         execute_action(action)
+    else:
+        leader.stop()
+        leader = select_leader()
 
 print("Hopefully in orbit!")
 
-for fc in flight_computers:
+for fc in flight_computers.values():
     fc.stop()

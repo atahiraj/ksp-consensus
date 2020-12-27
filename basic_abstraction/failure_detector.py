@@ -62,9 +62,8 @@ class PerfectFailureDetector(Subscriptable):
     def timeout(self):
         with self.lock:
             for peer in self.peers - self.correct - self.detected:
-                self.detected.add(peer)
-
                 self.logger.log_debug(f"Peer {peer} crashed")
+                self.detected.add(peer)
                 self.call_callbacks(peer)
 
             self.correct.clear()

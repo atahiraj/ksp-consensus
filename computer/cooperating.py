@@ -32,7 +32,7 @@ class CooperatingComputer(FlightComputer):
         self.majority_voting.stop()
 
     def decide_on_value(self, value):
-        vote_result = self.majority_voting(value)
+        vote_result = self.majority_voting.vote(value)
         return vote_result
 
     def decide_on_state(self, state):
@@ -56,3 +56,6 @@ class CooperatingComputer(FlightComputer):
             self.deliver_state(actual_value)
         elif proposition_type == "action":
             self.deliver_action(actual_value)
+
+    def get_leader(self):
+        return self.majority_voting.get_leader()
