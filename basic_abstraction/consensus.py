@@ -3,12 +3,12 @@ import time
 from basic_abstraction.broadcast import BestEffortBroadcast
 from basic_abstraction.failure_detector import PerfectFailureDetector
 from basic_abstraction.link import PerfectLink
-from basic_abstraction.base import Subscriptable
+from basic_abstraction.base import Subscribable
 
 from utils import Logging
 
 
-class Consensus(Subscriptable):
+class Consensus(Subscribable):
     """This abstract  class implements a generic consensus algorithm."""
 
     def __init__(

@@ -1,11 +1,11 @@
 from threading import Thread, Lock
 import time
 
-from basic_abstraction.base import Subscriptable
+from basic_abstraction.base import Subscribable
 from utils import Logging
 
 
-class PerfectFailureDetector(Subscriptable):
+class PerfectFailureDetector(Subscribable):
     """This class implements the perfect failure detector abstraction.
 
     Uses:

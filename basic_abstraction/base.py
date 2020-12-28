@@ -53,10 +53,10 @@ class Abstraction:
             raise Exception("Events must be strings or have __name__ attr")
 
 
-class Subscriptable(Abstraction):
+class Subscribable(Abstraction):
     """This class implements a subscriptable abstraction.
 
-    Subscriptable abstractions are abstractions that remember multiple callbacks
+    Subscribable abstractions are abstractions that remember multiple callbacks
     and may call them all. This class was made a bit too generic as it supports
     function callbacks although only triggering events is required in this
     project.
@@ -188,7 +188,7 @@ if __name__ == "__main__":
     def callback():
         print("Function: Hello!")
 
-    sub = Subscriptable()
+    sub = Subscribable()
     test0 = TestSubscr(0)
     test1 = TestSubscr(1)
     test2 = TestSubscr(2)

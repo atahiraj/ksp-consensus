@@ -1,9 +1,9 @@
-from basic_abstraction.base import Subscriptable
+from basic_abstraction.base import Subscribable
 
 from utils import Logging
 
 
-class LeaderElection(Subscriptable):
+class LeaderElection(Subscribable):
     """
     """
     def __init__(self, pfd, hco):
