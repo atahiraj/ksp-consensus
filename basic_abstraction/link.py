@@ -88,7 +88,7 @@ class PerfectLink(Registrable):
         return sender
 
     def get_address(self, process_number):
-        return f"/tmp/fairlosslink{process_number}.socket"
+        return f"/tmp/link{process_number}.socket"
 
     def get_process(self, address):
         return int(re.findall("[0-9]+", address)[0])
