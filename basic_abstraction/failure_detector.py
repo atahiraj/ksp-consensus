@@ -9,13 +9,12 @@ class PerfectFailureDetector(Subscribable):
     """This class implements the perfect failure detector abstraction.
 
     Uses:
-        - PërfectLink
+        - PerfectLink
 
-    This class uses hearbeats that require a response. If no response frome a
+    This class uses hearbeats that require a response. If no response from a
     peer came back in time, the peer is assumed to have failed. When a peer
     fails, the subscribed callbacks are called. Timeout is chosen to be the
-    Abstraction class' TIMEOUT attribute divided by 10. Perhaps taking twice the
-    round-trip delay time would have been a better idea?
+    Abstraction class' TIMEOUT attribute divided by 10.
 
     """
 
