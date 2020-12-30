@@ -4,7 +4,16 @@ from utils import Logging
 
 
 class LeaderElection(Subscriptable):
-    """
+    """ This class implement a hierarchical leader election abstraction.
+
+    Uses:
+        - PerfectFailureDetector
+        - HierarchicalConsensus
+
+    A peer's rank is greater than another's iff its process number is strictly
+    lower than the other's. All sbscribed methods are called whenever a new
+    leader is elected.
+
     """
     def __init__(self, pfd, hco):
         super().__init__()

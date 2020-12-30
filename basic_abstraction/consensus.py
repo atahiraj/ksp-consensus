@@ -33,9 +33,10 @@ class HierarchicalConsensus(Consensus):
         - PerfectFailureDetector
         - BestEffortBroadcast
 
-    The peers' ranks are chosen to be their process number. The propose method
-    is the entry point to the consensus algorithm. When the consensus is
-    finished, the subscribed callbacks are called.
+    A peer's rank is greater than another's iff its process number is strictly
+    lower than the other's. The propose method is the entry point to the
+    consensus algorithm. When the consensus is finished, the subscribed
+    callbacks are called.
 
     """
 
